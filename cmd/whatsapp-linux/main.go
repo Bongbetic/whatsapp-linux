@@ -3,21 +3,23 @@
 //	whatsapp-linux [--hidden] [--reset-profile [--full]] [--version]
 //	               [--debug] [whatsapp://…|https://wa.me/…]
 //
-// Exit codes: 0 ok, 2 bad args, 3 already-running / store locked,
+// Exit codes: 0 ok, 2 bad args, 3 already-running / engine failure,
 // 4 store corrupt.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/diamondburned/gotk4/pkg/gio/v2"
-	"github.com/diamondburned/gotk4/pkg/gtk/v4"
-
+	"github.com/Bongbetic/whatsapp-linux/internal/app"
+	"github.com/Bongbetic/whatsapp-linux/internal/core"
 	"github.com/Bongbetic/whatsapp-linux/internal/links"
 	"github.com/Bongbetic/whatsapp-linux/internal/logx"
+	"github.com/Bongbetic/whatsapp-linux/internal/settings"
+	"github.com/Bongbetic/whatsapp-linux/internal/store"
 )
 
 var version = "0.0.0-dev"
@@ -38,58 +40,51 @@ func run(args []string) int {
 	}
 	log := logx.New(*debug)
 
-	var intent *links.Intent
 	for _, a := range fs.Args() {
-		in, err := links.Parse(a)
-		if err != nil {
+		if _, err := links.Parse(a); err != nil {
 			log.Error().Str("arg", logx.Scrub(a)).Msg("bad URI argument")
 			return 2
 		}
-		intent = &in
+		// TODO WL-2.1: forward validated URIs to the running instance.
 	}
-	_ = intent // handed to the app shell at WL-2.1; parsed+validated here
 
 	if *showVer {
 		fmt.Println("whatsapp-linux", version)
 		return 0
 	}
-	if *reset {
-		return resetProfile(*full)
-	}
-
 	dataDir := profileDataDir()
+	if *reset {
+		return resetProfile(dataDir, *full)
+	}
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		log.Error().Err(err).Msg("profile dir")
 		return 4
 	}
 
-	app := gtk.NewApplication("com.bongbetic.WhatsAppLinux", gio.ApplicationHandlesOpen)
-	app.ConnectActivate(func() { activate(app, *hidden) })
-	// TODO WL-2.1: single-instance URI handoff via "open" signal.
-	if code := app.Run(nil); code != 0 {
-		log.Error().Int("code", code).Msg("application exited non-zero")
-		return 3
+	db, err := store.Open(filepath.Join(dataDir, "app.db"))
+	if err != nil {
+		log.Error().Err(err).Msg("open app.db")
+		return 4
 	}
-	return 0
-}
+	defer db.Close()
 
-// activate builds the Phase-1 placeholder window (WL-1.0 accept:
-// `make` builds an empty GUI that opens a window). WL-2.1 replaces
-// this body with the internal/app shell.
-func activate(app *gtk.Application, hidden bool) {
-	win := gtk.NewApplicationWindow(app)
-	win.SetTitle("WhatsApp (unofficial)")
-	win.SetDefaultSize(1180, 760)
-	label := gtk.NewLabel("whatsapp-linux — pairing and chat UI lands in Phase 2 (WL-2.x).")
-	win.SetChild(label)
-	if !hidden {
-		win.Show()
+	eng, err := core.New(log, dataDir, db)
+	if err != nil {
+		log.Error().Err(err).Msg("new engine")
+		return 4
 	}
+	if err := eng.Open(context.Background(), dataDir); err != nil {
+		log.Error().Err(err).Msg("open session")
+		return 4
+	}
+	defer eng.Stop()
+
+	s := settings.New() // GSettings backend attaches when schema installed (WL-2.6)
+	return app.Run(app.Config{Engine: eng, DB: db, Settings: s, Log: log, Version: version, Hidden: *hidden})
 }
 
 // resetProfile implements --reset-profile (§11).
-func resetProfile(full bool) int {
-	dir := profileDataDir()
+func resetProfile(dir string, full bool) int {
 	remove := []string{"app.db", "app.db-wal", "app.db-shm", "media", "avatars", "stickers"}
 	if full {
 		remove = append(remove, "session.db", "session.db-wal", "session.db-shm")

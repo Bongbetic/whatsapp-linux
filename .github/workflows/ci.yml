@@ -23,7 +23,7 @@ jobs:
       - name: Format check
         run: test -z "$(gofmt -l .)"
       - name: Tests
-        run: go test ./...
+        run: go test -tags sqlite_fts5 ./...
       - name: Build
         run: make build
       - name: UI smoke (xvfb, 3 s window)
