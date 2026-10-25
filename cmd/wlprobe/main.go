@@ -19,6 +19,7 @@ import (
 	"github.com/Bongbetic/whatsapp-linux/internal/bridge"
 	"github.com/Bongbetic/whatsapp-linux/internal/core"
 	"github.com/Bongbetic/whatsapp-linux/internal/logx"
+	appstore "github.com/Bongbetic/whatsapp-linux/internal/store"
 )
 
 func main() {
@@ -27,7 +28,7 @@ func main() {
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: wlprobe pair|send <jid> <text>|dump-events|call-probe")
+		fmt.Fprintln(os.Stderr, "usage: wlprobe pair|send <jid> <text>|dump-events|call-probe|export <app.db> <jid> <txt|json>")
 		return 2
 	}
 	home := os.Getenv("WLPROBE_HOME")
@@ -49,6 +50,12 @@ func run(args []string) int {
 	defer eng.Stop()
 
 	switch args[0] {
+	case "export":
+		if len(args) < 4 {
+			fmt.Fprintln(os.Stderr, "usage: wlprobe export <app.db> <jid> <txt|json>")
+			return 2
+		}
+		return doExport(args[1], args[2], args[3], log)
 	case "pair":
 		return doPair(ctx, eng)
 	case "send":
@@ -154,6 +161,21 @@ func doCallProbe(ctx context.Context, eng bridge.Engine, log zerolog.Logger, hom
 			time.Now().UTC().Format(time.RFC3339), ce.ID, ce.Direction, ce.Media, ce.Stage, ce.Chat)
 		fmt.Println(line)
 		fmt.Fprintln(f, line)
+	}
+	return 0
+}
+
+// doExport dumps one chat's history (WL-6.2 proof path).
+func doExport(dbPath, jid, format string, log zerolog.Logger) int {
+	db, err := appstore.Open(dbPath)
+	if err != nil {
+		log.Error().Err(err).Msg("open app.db")
+		return 4
+	}
+	defer db.Close()
+	if err := db.ExportChat(context.Background(), jid, format, os.Stdout); err != nil {
+		log.Error().Err(err).Msg("export")
+		return 3
 	}
 	return 0
 }

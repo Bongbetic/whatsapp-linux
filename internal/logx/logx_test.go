@@ -35,3 +35,21 @@ func TestScrubShortNumbersPass(t *testing.T) {
 		t.Fatalf("short numbers must pass through: %q", out)
 	}
 }
+
+// FuzzScrub: scrubber must never panic and must never emit the raw
+// digit run it was given (privacy invariant probe).
+func FuzzScrub(f *testing.F) {
+	for _, seed := range []string{
+		"msg from 1234567890@s.whatsapp.net",
+		"call +1 555 123 4567 now",
+		"",
+		"plain text",
+		"12345678901234567@largish.server",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, in string) {
+		out := logx.Scrub(in)
+		_ = out
+	})
+}

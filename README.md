@@ -21,6 +21,7 @@ Built phase-by-phase from `whatsapp-linux.md` (plan; not shipped):
 - [x] Phase 3 — media complete
 - [x] Phase 4 — social complete
 - [ ] Phase 5 — calls (signaling done; media gates need live verification)
+- [ ] Phase 6 — hardening
 - [ ] Phase 3 — media complete
 - [ ] Phase 4 — social complete
 - [ ] Phase 5 — calls

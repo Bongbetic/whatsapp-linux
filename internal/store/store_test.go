@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,6 +94,47 @@ func TestSearchFTS(t *testing.T) {
 	}
 	if again, _ := db.SearchMessages(ctx, "hello", "", 10); len(again) != 1 {
 		t.Fatalf("reindex=%+v", again)
+	}
+}
+
+func TestBackupAndExport(t *testing.T) {
+	db, ctx := openTestDB(t)
+	chat := bridge.Chat{JID: bridge.JID{User: "e", Server: "s.whatsapp.net"}, Kind: bridge.ChatDM, Title: "Ex"}
+	if err := db.UpsertChat(ctx, chat); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertMessage(ctx, bridge.Message{Chat: chat.JID, ID: "m1", Sender: chat.JID, Ts: time.Unix(10, 0), Kind: bridge.MsgText, Body: "hello", State: bridge.StateRead}); err != nil {
+		t.Fatal(err)
+	}
+	var txt strings.Builder
+	if err := db.ExportChat(ctx, chat.JID.String(), "txt", &txt); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(txt.String(), "hello") || !strings.Contains(txt.String(), "Ex") {
+		t.Fatalf("txt=%q", txt.String())
+	}
+	var js strings.Builder
+	if err := db.ExportChat(ctx, chat.JID.String(), "json", &js); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Messages []struct {
+			Body string `json:"body"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(js.String()), &decoded); err != nil || len(decoded.Messages) != 1 {
+		t.Fatalf("json=%q err=%v", js.String(), err)
+	}
+	if err := db.ExportChat(ctx, chat.JID.String(), "xml", &js); err == nil {
+		t.Fatal("bad format must fail")
+	}
+	bak := filepath.Join(t.TempDir(), "backup.db")
+	if err := db.BackupTo(bak); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(bak)
+	if err != nil || fi.Size() == 0 {
+		t.Fatalf("backup missing: %v", err)
 	}
 }
 

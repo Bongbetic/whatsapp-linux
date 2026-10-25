@@ -26,7 +26,11 @@ func Parse(raw string) (Intent, error) {
 	case "whatsapp":
 		if u.Host == "send" || strings.HasPrefix(u.Path, "/send") {
 			q := u.Query()
-			return Intent{Kind: "chat", Phone: digits(q.Get("phone")), Text: q.Get("text")}, nil
+			phone := digits(q.Get("phone"))
+			if phone == "" {
+				return Intent{}, fmt.Errorf("whatsapp link has no phone: %q", raw)
+			}
+			return Intent{Kind: "chat", Phone: phone, Text: q.Get("text")}, nil
 		}
 	case "https", "http":
 		if strings.EqualFold(u.Host, "wa.me") {
