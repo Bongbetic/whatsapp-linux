@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    container: ghcr.io/void-linux/void-glibc:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: |
+          xbps-install -Suy go gtk4-devel libadwaita-devel \
+            gobject-introspection libgirepository-devel pkg-config \
+            gstreamer1-devel gst-plugins-base1-devel gst-plugins-good1 \
+            gst-plugins-bad1 pipewire sqlite-devel libwebp-devel \
+            xdg-desktop-portal xvfb-run git
+      - name: Vet
+        run: go vet ./...
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+      - name: Tests
+        run: go test ./...
+      - name: Build
+        run: make build
+      - name: UI smoke (xvfb, 3 s window)
+        run: xvfb-run -a ./whatsapp-linux --version

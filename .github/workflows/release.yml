@@ -1,0 +1,50 @@
+name: release
+
+# Taema flow (plan §16): tag-driven. Bump VERSION, commit, push,
+# then push tag whatsapp-linux-vX.Y.Z (must equal VERSION).
+# Every push/tag needs the owner's explicit OK.
+
+on:
+  push:
+    tags: ['whatsapp-linux-v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: [x86_64, x86_64-musl, aarch64, aarch64-musl]
+    runs-on: ubuntu-latest
+    container: ghcr.io/void-linux/void-glibc:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches VERSION
+        run: |
+          test "${GITHUB_REF_NAME}" = "whatsapp-linux-v$(cat VERSION)"
+      - name: Build package
+        run: bash tools/build-xbps.sh "${{ matrix.arch }}"
+      - name: Sign and index
+        run: |
+          cd dist
+          XBPS_ARCH=${{ matrix.arch }} xbps-rindex -a -- *.xbps
+          xbps-rindex --privkey "$XBPS_PRIVKEY" \
+            --signedby "Bongbetic <soubarna@live.in>" -s .
+          XBPS_ARCH=${{ matrix.arch }} xbps-rindex -S ./*.xbps
+        env:
+          XBPS_PRIVKEY: ${{ secrets.XBPS_PRIVKEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repodata-${{ matrix.arch }}
+          path: dist/
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Attach to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
