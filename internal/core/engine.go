@@ -23,6 +23,7 @@ import (
 	"github.com/Bongbetic/whatsapp-linux/internal/bridge"
 	"github.com/Bongbetic/whatsapp-linux/internal/logx"
 	appstore "github.com/Bongbetic/whatsapp-linux/internal/store"
+	"github.com/Bongbetic/whatsapp-linux/internal/voip"
 )
 
 // Compile-time check: Engine implements bridge.Engine.
@@ -41,6 +42,7 @@ type Engine struct {
 	media     map[string]whatsmeow.DownloadableMessage // chatID/msgID → proto
 	pool      [2]chan dispatchItem
 	poolWg    sync.WaitGroup
+	calls     *voip.Switch
 }
 
 type dispatchItem struct {
@@ -61,6 +63,7 @@ func New(log zerolog.Logger, profileDir string, db *appstore.DB) (*Engine, error
 		events: make(chan bridge.Event, 256),
 		media:  make(map[string]whatsmeow.DownloadableMessage),
 	}
+	e.calls = voip.NewSwitch(e.onCallChange)
 	// §8: worker pool of 2, ordered per chat by JID hash.
 	for i := 0; i < 2; i++ {
 		e.pool[i] = make(chan dispatchItem, 128)
@@ -353,6 +356,25 @@ func (e *Engine) handle(raw any) {
 		e.post(groupInfoToDTO(evt))
 	case *events.ChatPresence:
 		e.post(bridge.TypingEvent{Chat: fromWAJID(evt.MessageSource.Chat), Sender: fromWAJID(evt.MessageSource.Sender), Typing: evt.State == chatPresenceComposing()})
+	case *events.CallOffer:
+		_, _ = e.calls.Ring(evt.CallID, evt.From.String(), "audio")
+	case *events.CallOfferNotice:
+		_, _ = e.calls.Ring(evt.CallID, evt.From.String(), evt.Media)
+	case *events.CallPreAccept:
+		_ = e.calls.PreAccept(evt.CallID)
+	case *events.CallAccept:
+		_ = e.calls.PreAccept(evt.CallID)
+		_ = e.calls.Connected(evt.CallID)
+	case *events.CallTransport:
+		_ = e.calls.Transport(evt.CallID)
+	case *events.CallTerminate:
+		outcome := "answered"
+		if c, ok := e.calls.Get(evt.CallID); ok && c.Stage == voip.StageRinging {
+			outcome = "missed"
+		}
+		_ = e.calls.End(evt.CallID, outcome)
+	case *events.CallReject:
+		_ = e.calls.End(evt.CallID, "rejected")
 	}
 }
 

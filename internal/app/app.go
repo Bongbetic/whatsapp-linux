@@ -25,6 +25,8 @@ import (
 	"github.com/Bongbetic/whatsapp-linux/internal/settings"
 	"github.com/Bongbetic/whatsapp-linux/internal/store"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/business"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/call"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/calls"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/channels"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/chatinfo"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/chatlist"
@@ -62,6 +64,9 @@ type App struct {
 	infoV   *chatinfo.View
 	statusV *status.View
 	chansV  *channels.View
+	callsV  *calls.View
+	callWin *call.Window
+	callID  string
 	notif   *notify.Notifier
 
 	current bridge.Chat
@@ -110,6 +115,12 @@ func (a *App) activate() {
 		a.stack.SetVisibleChildName("channels")
 	})
 	bar.PackStart(chansBtn)
+	callsBtn := gtk.NewButtonWithLabel("Calls")
+	callsBtn.ConnectClicked(func() {
+		a.callsV.Refresh()
+		a.stack.SetVisibleChildName("calls")
+	})
+	bar.PackStart(callsBtn)
 	a.win.SetTitlebar(bar)
 
 	a.banner, a.bannerL = widgets.Banner()
@@ -131,13 +142,7 @@ func (a *App) activate() {
 			_ = a.db.UpsertChat(context.Background(), bridge.Chat{JID: chat, Draft: text})
 		},
 		OnAttach: func(chat bridge.JID) { a.attach(chat) },
-		OnCall: func(chat bridge.JID, video bool) {
-			kind := "audio"
-			if video {
-				kind = "video"
-			}
-			a.log.Info().Str("kind", kind).Msg("calls land at WL-5.x")
-		},
+		OnCall:   func(chat bridge.JID, video bool) { a.placeCall(chat, video) },
 	}, a.settings.GetBool(settings.KeyEnterToSend))
 	right.Append(a.convV.Box)
 	a.convV.Box.SetHExpand(true)
@@ -177,6 +182,8 @@ func (a *App) activate() {
 	a.stack.AddNamed(a.statusV.Box, "status")
 	a.chansV = channels.New(a.db, a.engine)
 	a.stack.AddNamed(a.chansV.Box, "channels")
+	a.callsV = calls.New(a.db, a.engine, func(chat bridge.JID, video bool) { a.placeCall(chat, video) })
+	a.stack.AddNamed(a.callsV.Box, "calls")
 
 	root.Append(a.stack)
 	a.win.SetChild(root)
@@ -280,6 +287,46 @@ func (a *App) handle(ev bridge.Event) {
 			widgets.SetBanner(a.banner, a.bannerL, "")
 			a.refreshChats()
 		}
+	case bridge.CallEvent:
+		a.onCall(e)
+	}
+}
+
+// placeCall dials out (WL-5.1 fork-gated) and surfaces the verdict.
+func (a *App) placeCall(chat bridge.JID, video bool) {
+	id, err := a.engine.CallPlace(context.Background(), chat, video)
+	if err != nil {
+		widgets.SetBanner(a.banner, a.bannerL, "Calls need the fork (WL-5.1): "+err.Error())
+		return
+	}
+	a.callID = id
+	a.callWin = call.Show(a.win, bridge.CallEvent{ID: id, Direction: "out", Media: map[bool]string{true: "video", false: "audio"}[video], Stage: "offering"},
+		func() { _ = a.engine.CallHangup(context.Background(), id) })
+}
+
+// onCall routes incoming switch transitions to the call UI (WL-5.3).
+func (a *App) onCall(e bridge.CallEvent) {
+	if e.Direction == "in" && e.Stage == "ringing" {
+		a.callID = e.ID
+		call.Incoming(a.win, e,
+			func() {
+				if err := a.engine.CallAccept(context.Background(), e.ID, e.Media == "video"); err != nil {
+					widgets.SetBanner(a.banner, a.bannerL, "Accept needs the fork (WL-5.1): "+err.Error())
+				}
+			},
+			func() {
+				_ = a.engine.CallReject(context.Background(), e.Chat, e.ID)
+			})
+		return
+	}
+	if e.ID == a.callID && a.callWin != nil {
+		if e.Stage == "ended" {
+			a.callWin.Close()
+			a.callWin = nil
+			a.callsV.Refresh()
+			return
+		}
+		a.callWin.SetStage(e.Stage)
 	}
 }
 

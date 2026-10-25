@@ -19,7 +19,8 @@ Built phase-by-phase from `whatsapp-linux.md` (plan; not shipped):
 - [x] Phase 1 — core engine + stores + license audit
 - [x] Phase 2 — messaging UI (0.1.0 gate: owner daily-driver test)
 - [x] Phase 3 — media complete
-- [ ] Phase 4 — social complete
+- [x] Phase 4 — social complete
+- [ ] Phase 5 — calls (signaling done; media gates need live verification)
 - [ ] Phase 3 — media complete
 - [ ] Phase 4 — social complete
 - [ ] Phase 5 — calls
