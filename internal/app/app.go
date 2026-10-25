@@ -289,6 +289,9 @@ func (a *App) handle(ev bridge.Event) {
 		}
 	case bridge.CallEvent:
 		a.onCall(e)
+	case bridge.RefreshEvent:
+		a.refreshChats()
+		a.reloadCurrent()
 	}
 }
 

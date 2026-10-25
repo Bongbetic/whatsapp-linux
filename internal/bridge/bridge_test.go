@@ -11,6 +11,7 @@ func TestEventKinds(t *testing.T) {
 		bridge.ConnEvent{}, bridge.QRCode{}, bridge.PairDone{},
 		bridge.MessageEvent{}, bridge.ChatEvent{}, bridge.ReceiptEvent{},
 		bridge.TypingEvent{}, bridge.SyncProgress{}, bridge.CallEvent{},
+		bridge.RefreshEvent{},
 	}
 	seen := map[string]bool{}
 	for _, e := range evs {
