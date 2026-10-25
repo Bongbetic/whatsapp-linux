@@ -26,7 +26,10 @@ fmt:
 smoke: build
 	xvfb-run -a ./whatsapp-linux --version
 
+sounds:
+	go run ./tools/gensounds data/sounds
+
 clean:
 	rm -f whatsapp-linux wlprobe
 
-.PHONY: all build wlprobe test test-race vet fmt smoke clean
+.PHONY: all build wlprobe test test-race vet fmt smoke sounds clean

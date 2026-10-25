@@ -6,7 +6,9 @@ package app
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
@@ -18,6 +20,7 @@ import (
 	"github.com/Bongbetic/whatsapp-linux/internal/autostart"
 	"github.com/Bongbetic/whatsapp-linux/internal/bridge"
 	"github.com/Bongbetic/whatsapp-linux/internal/logx"
+	"github.com/Bongbetic/whatsapp-linux/internal/media"
 	"github.com/Bongbetic/whatsapp-linux/internal/notify"
 	"github.com/Bongbetic/whatsapp-linux/internal/settings"
 	"github.com/Bongbetic/whatsapp-linux/internal/store"
@@ -39,6 +42,9 @@ type App struct {
 	log      zerolog.Logger
 	version  string
 	hidden   bool
+
+	dataDir  string
+	cacheDir string
 
 	win     *gtk.ApplicationWindow
 	connLbl *gtk.Label
@@ -64,12 +70,14 @@ type Config struct {
 	Log      zerolog.Logger
 	Version  string
 	Hidden   bool
+	DataDir  string // ~/.local/share/whatsapp-linux (§6)
+	CacheDir string // ~/.cache/whatsapp-linux (§6)
 }
 
 // Run starts the application (blocks until quit). No GTK calls happen
 // before this, so headless commands can build Config without a display.
 func Run(cfg Config) int {
-	a := &App{engine: cfg.Engine, db: cfg.DB, settings: cfg.Settings, log: cfg.Log, version: cfg.Version, hidden: cfg.Hidden}
+	a := &App{engine: cfg.Engine, db: cfg.DB, settings: cfg.Settings, log: cfg.Log, version: cfg.Version, hidden: cfg.Hidden, dataDir: cfg.DataDir, cacheDir: cfg.CacheDir}
 	a.gtkApp = gtk.NewApplication(bridge.AppID, gio.ApplicationHandlesOpen)
 	a.gtkApp.ConnectActivate(a.activate)
 	return a.gtkApp.Run(nil)
@@ -104,7 +112,7 @@ func (a *App) activate() {
 		OnDraft: func(chat bridge.JID, text string) {
 			_ = a.db.UpsertChat(context.Background(), bridge.Chat{JID: chat, Draft: text})
 		},
-		OnAttach: func(chat bridge.JID) { a.log.Info().Msg("attach picker lands at WL-2.3") },
+		OnAttach: func(chat bridge.JID) { a.attach(chat) },
 		OnCall: func(chat bridge.JID, video bool) {
 			kind := "audio"
 			if video {
@@ -138,9 +146,11 @@ func (a *App) activate() {
 	)
 	a.stack.AddNamed(a.loginV.Box, "login")
 
-	a.stack.AddNamed(uisettings.New(a.settings, func() {
+	settingsPage := uisettings.New(a.settings, func() {
 		a.log.Info().Msg("privacy pages land at WL-4.6")
-	}).Box, "settings")
+	})
+	settingsPage.Box.Append(uisettings.StorageSection(a.dataDir, a.cacheDir))
+	a.stack.AddNamed(settingsPage.Box, "settings")
 
 	root.Append(a.stack)
 	a.win.SetChild(root)
@@ -355,6 +365,79 @@ func (a *App) send(chat bridge.JID, text, quotedID string) {
 			return false
 		})
 	}()
+}
+
+// attach implements the WL-2.3/WL-3.x attachment path: native file
+// picker → prepare (image cap / video transcode) → SendMedia with
+// the composer draft as caption.
+func (a *App) attach(chat bridge.JID) {
+	dlg := gtk.NewFileChooserNative("Attach file", &a.win.Window, gtk.FileChooserActionOpen, "Send", "Cancel")
+	dlg.ConnectResponse(func(id int) {
+		defer dlg.Destroy()
+		if id != int(gtk.ResponseAccept) || dlg.File() == nil {
+			return
+		}
+		path := dlg.File().Path()
+		go a.sendFile(chat, path)
+	})
+	dlg.Show()
+}
+
+func (a *App) sendFile(chat bridge.JID, path string) {
+	ctx := context.Background()
+	kind, mime := classifyFile(path)
+	final := path
+	var err error
+	switch kind {
+	case "image":
+		final, err = media.PrepareImage(path, a.cacheDir, false)
+	case "video":
+		if need, perr := media.NeedsTranscode(path); perr == nil && need {
+			out := final + ".conv.mp4"
+			if terr := media.TranscodeMP4(path, out); terr == nil {
+				final = out
+			} else {
+				err = terr
+			}
+		} else if perr != nil {
+			err = perr
+		}
+	}
+	if err != nil {
+		a.log.Error().Err(err).Msg("prepare attachment")
+		return
+	}
+	id, err := a.engine.SendMedia(ctx, chat, bridge.MediaFile{Path: final, MIME: mime, Kind: kind}, bridge.SendOpts{})
+	glib.IdleAdd(func() bool {
+		if err != nil {
+			a.log.Error().Err(err).Msg("send media failed")
+			return false
+		}
+		a.log.Debug().Str("id", logx.Scrub(string(id))).Msg("media sent")
+		a.reloadCurrent()
+		return false
+	})
+}
+
+// classifyFile maps a picked path to (media kind, MIME) by extension.
+func classifyFile(path string) (string, string) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image", "image/jpeg"
+	case ".png":
+		return "image", "image/png"
+	case ".webp":
+		return "image", "image/webp"
+	case ".mp4", ".mov", ".mkv", ".webm":
+		return "video", "video/mp4"
+	case ".ogg", ".oga":
+		return "audio", "audio/ogg"
+	case ".mp3":
+		return "audio", "audio/mpeg"
+	default:
+		return "doc", "application/octet-stream"
+	}
 }
 
 func chatFor(ctx context.Context, db *store.DB, jid bridge.JID) bridge.Chat {

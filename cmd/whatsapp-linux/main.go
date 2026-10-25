@@ -80,7 +80,15 @@ func run(args []string) int {
 	defer eng.Stop()
 
 	s := settings.New() // GSettings backend attaches when schema installed (WL-2.6)
-	return app.Run(app.Config{Engine: eng, DB: db, Settings: s, Log: log, Version: version, Hidden: *hidden})
+	return app.Run(app.Config{Engine: eng, DB: db, Settings: s, Log: log, Version: version, Hidden: *hidden, DataDir: dataDir, CacheDir: cacheDir()})
+}
+
+func cacheDir() string {
+	if d := os.Getenv("XDG_CACHE_HOME"); d != "" {
+		return filepath.Join(d, "whatsapp-linux")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".cache", "whatsapp-linux")
 }
 
 // resetProfile implements --reset-profile (§11).

@@ -21,9 +21,6 @@ AppxMetadata/
 *.db-wal
 *.db-shm
 
-# Generated sounds (rebuilt by tools/gensounds)
-data/sounds/*.wav
-
 # Go
 /vendor/
 
