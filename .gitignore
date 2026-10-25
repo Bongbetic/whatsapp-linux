@@ -1,0 +1,41 @@
+# Reference artifacts (never committed) — plan §1
+*.msix
+*.MsixBundle
+*.msixbundle
+*.Appx
+*.appx
+*.exe
+AppxMetadata/
+
+# Build output
+/dist/
+/build/
+whatsapp-linux
+wlprobe
+*.o
+*.a
+
+# Local databases / profiles
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Generated sounds (rebuilt by tools/gensounds)
+data/sounds/*.wav
+
+# Go
+/vendor/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Test / coverage artifacts
+*.test
+*.out
+coverage.html
+/tmp/
