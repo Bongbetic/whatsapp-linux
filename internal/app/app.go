@@ -24,12 +24,16 @@ import (
 	"github.com/Bongbetic/whatsapp-linux/internal/notify"
 	"github.com/Bongbetic/whatsapp-linux/internal/settings"
 	"github.com/Bongbetic/whatsapp-linux/internal/store"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/business"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/channels"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/chatinfo"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/chatlist"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/convo"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/dialogs"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/groups"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/login"
 	uisettings "github.com/Bongbetic/whatsapp-linux/internal/ui/settings"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/status"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/widgets"
 )
 
@@ -56,6 +60,8 @@ type App struct {
 	chatsV  *chatlist.View
 	convV   *convo.View
 	infoV   *chatinfo.View
+	statusV *status.View
+	chansV  *channels.View
 	notif   *notify.Notifier
 
 	current bridge.Chat
@@ -92,6 +98,18 @@ func (a *App) activate() {
 	a.connLbl = gtk.NewLabel("●")
 	a.connLbl.SetTooltipText("Connecting…")
 	bar.PackStart(a.connLbl)
+	statusBtn := gtk.NewButtonWithLabel("Status")
+	statusBtn.ConnectClicked(func() {
+		a.statusV.Refresh()
+		a.stack.SetVisibleChildName("status")
+	})
+	bar.PackStart(statusBtn)
+	chansBtn := gtk.NewButtonWithLabel("Channels")
+	chansBtn.ConnectClicked(func() {
+		a.chansV.Refresh()
+		a.stack.SetVisibleChildName("channels")
+	})
+	bar.PackStart(chansBtn)
 	a.win.SetTitlebar(bar)
 
 	a.banner, a.bannerL = widgets.Banner()
@@ -125,8 +143,9 @@ func (a *App) activate() {
 	a.convV.Box.SetHExpand(true)
 	a.infoV = chatinfo.New(chatinfo.Callbacks{
 		OnMute:      func(chat bridge.JID, h int64) { a.log.Info().Msg("mute lands at WL-2.6") },
-		OnBlock:     func(chat bridge.JID, b bool) { a.log.Info().Msg("block lands at WL-4.6") },
-		OnGroupEdit: func(chat bridge.JID) { a.log.Info().Msg("group mgmt lands at WL-4.1") },
+		OnBlock:     func(chat bridge.JID, b bool) { _ = a.engine.BlockSet(context.Background(), chat, b) },
+		OnGroupEdit: func(chat bridge.JID) { groups.Manage(a.win, a.engine, chat) },
+		OnBusiness:  func(chat bridge.JID) { business.Show(a.win, a.engine, chat) },
 	})
 	right.Append(a.infoV.Box)
 	a.paned.SetEndChild(right)
@@ -147,10 +166,17 @@ func (a *App) activate() {
 	a.stack.AddNamed(a.loginV.Box, "login")
 
 	settingsPage := uisettings.New(a.settings, func() {
-		a.log.Info().Msg("privacy pages land at WL-4.6")
+		a.stack.SetVisibleChildName("privacy")
 	})
 	settingsPage.Box.Append(uisettings.StorageSection(a.dataDir, a.cacheDir))
 	a.stack.AddNamed(settingsPage.Box, "settings")
+	a.stack.AddNamed(uisettings.PrivacySection(a.engine, a.log), "privacy")
+	a.statusV = status.New(a.db, a.engine, func(to bridge.JID, text string) {
+		_, _ = a.engine.SendText(context.Background(), to, text, bridge.SendOpts{})
+	})
+	a.stack.AddNamed(a.statusV.Box, "status")
+	a.chansV = channels.New(a.db, a.engine)
+	a.stack.AddNamed(a.chansV.Box, "channels")
 
 	root.Append(a.stack)
 	a.win.SetChild(root)
