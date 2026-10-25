@@ -332,4 +332,10 @@ type Engine interface {
 	BusinessProfile(ctx context.Context, biz JID) (BusinessProfile, error)
 	// Disappearing default for new chats (WL-4.6).
 	DisappearingDefaultSet(ctx context.Context, secs int64) error
+	// Calls (Phase 5). Place/Accept need the whatsmeow fork (WL-5.1)
+	// and report ErrCallsForkRequired until it lands.
+	CallPlace(ctx context.Context, chat JID, video bool) (CallID string, err error)
+	CallAccept(ctx context.Context, callID string, video bool) error
+	CallReject(ctx context.Context, chat JID, callID string) error
+	CallHangup(ctx context.Context, callID string) error
 }

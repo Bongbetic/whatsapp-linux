@@ -70,8 +70,7 @@ func run(args []string) int {
 	case "dump-events":
 		return doDump(ctx, eng, log)
 	case "call-probe":
-		fmt.Println("call-probe lands at WL-5.0 (packet capture of own calls)")
-		return 0
+		return doCallProbe(ctx, eng, log, home)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown subcommand", args[0])
 		return 2
@@ -128,6 +127,35 @@ func printQR(code string) error {
 		fmt.Println(sb.String())
 	}
 	return nil
+}
+
+// doCallProbe captures the WL-5.0 signaling evidence: every call
+// event (offer/accept/transport/terminate with IDs and peers) is
+// appended to $WLPROBE_HOME/calls.log for the media plan A/B
+// decision. Run while placing/ringing calls from the phone.
+func doCallProbe(ctx context.Context, eng bridge.Engine, log zerolog.Logger, home string) int {
+	if err := eng.Start(ctx); err != nil {
+		log.Error().Err(err).Msg("connect")
+		return 3
+	}
+	f, err := os.OpenFile(home+"/calls.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		log.Error().Err(err).Msg("calls.log")
+		return 4
+	}
+	defer f.Close()
+	fmt.Fprintln(f, "--- call-probe started", time.Now().UTC().Format(time.RFC3339))
+	for ev := range eng.Events() {
+		ce, ok := ev.(bridge.CallEvent)
+		if !ok {
+			continue
+		}
+		line := fmt.Sprintf("%s id=%s dir=%s media=%s stage=%s chat=%s",
+			time.Now().UTC().Format(time.RFC3339), ce.ID, ce.Direction, ce.Media, ce.Stage, ce.Chat)
+		fmt.Println(line)
+		fmt.Fprintln(f, line)
+	}
+	return 0
 }
 
 func doDump(ctx context.Context, eng bridge.Engine, log zerolog.Logger) int {
