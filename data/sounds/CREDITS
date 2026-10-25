@@ -1,0 +1,17 @@
+# data/sounds — original tones (WL-3.6)
+
+Every file here is synthesized from scratch by `tools/gensounds`
+(sine envelopes, no samples, no Meta audio). Regenerate:
+
+    go run ./tools/gensounds [outdir]   # default data/sounds
+    make sounds
+
+| File | Use |
+|---|---|
+| `notice.wav` | incoming message notification |
+| `sent.wav` | message sent tick |
+| `receive.wav` | message received tick |
+| `ringtone.wav` | incoming call loop (2 s) |
+
+License: same MIT terms as the repo (`LICENSE`). Per-chat tone
+picker binds filenames under this dir (WL-3.6 UI row in Settings).
