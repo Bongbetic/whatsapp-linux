@@ -168,7 +168,9 @@ func (e *Engine) Logout(ctx context.Context) error {
 	return cli.Logout(ctx)
 }
 
-// PairQR connects (if needed) and streams pairing codes.
+// PairQR streams pairing codes for a fresh device. whatsmeow requires
+// GetQRChannel BEFORE Connect; Connect then runs in the background
+// while codes (then success/timeout) arrive on the channel.
 func (e *Engine) PairQR(ctx context.Context) (<-chan bridge.QRCode, error) {
 	e.mu.Lock()
 	cli := e.cli
@@ -176,15 +178,18 @@ func (e *Engine) PairQR(ctx context.Context) (<-chan bridge.QRCode, error) {
 	if cli == nil {
 		return nil, fmt.Errorf("engine not opened")
 	}
-	if !cli.IsConnected() {
-		if err := cli.Connect(); err != nil {
-			return nil, err
-		}
+	if cli.Store.ID != nil {
+		return nil, fmt.Errorf("already paired: logout first to re-pair")
 	}
 	ch, err := cli.GetQRChannel(ctx)
 	if err != nil {
 		return nil, err
 	}
+	go func() {
+		if err := cli.Connect(); err != nil {
+			e.log.Error().Err(err).Msg("pair connect")
+		}
+	}()
 	out := make(chan bridge.QRCode, 4)
 	go func() {
 		defer close(out)

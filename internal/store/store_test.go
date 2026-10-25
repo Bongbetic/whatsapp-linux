@@ -17,8 +17,8 @@ func openTestDB(t *testing.T) (*DB, context.Context) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if v, err := db.Version(ctx); err != nil || v != 1 {
-		t.Fatalf("version=%d err=%v, want 1", v, err)
+	if v, err := db.Version(ctx); err != nil || v != 2 {
+		t.Fatalf("version=%d err=%v, want 2", v, err)
 	}
 	// Migrating twice is a noop (WL-1.2).
 	if err := db.migrate(ctx); err != nil {
@@ -56,6 +56,41 @@ func TestChatMessageRoundTrip(t *testing.T) {
 	next, err := db.ListChats(ctx, 10, chats[0].LastTs, chat.JID.String(), false)
 	if err != nil || len(next) != 0 {
 		t.Fatalf("second page=%+v err=%v", next, err)
+	}
+}
+
+func TestSearchFTS(t *testing.T) {
+	db, ctx := openTestDB(t)
+	chat := bridge.JID{User: "s", Server: "s.whatsapp.net"}
+	if err := db.UpsertChat(ctx, bridge.Chat{JID: chat, Kind: bridge.ChatDM}); err != nil {
+		t.Fatal(err)
+	}
+	mk := func(id, body string) bridge.Message {
+		return bridge.Message{Chat: chat, ID: id, Sender: chat, Ts: time.Unix(100, 0), Kind: bridge.MsgText, Body: body, State: bridge.StateSent}
+	}
+	for _, m := range []bridge.Message{mk("1", "hello world"), mk("2", "goodbye world"), mk("3", "hello again")} {
+		if err := db.UpsertMessage(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := db.SearchMessages(ctx, "hello", "", 10)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("search=%+v err=%v", got, err)
+	}
+	scoped, err := db.SearchMessages(ctx, "world", chat.String(), 10)
+	if err != nil || len(scoped) != 2 {
+		t.Fatalf("scoped=%+v err=%v", scoped, err)
+	}
+	if empty, err := db.SearchMessages(ctx, "   ", "", 10); err != nil || len(empty) != 0 {
+		t.Fatalf("blank=%+v err=%v", empty, err)
+	}
+	// Edit re-indexes via trigger.
+	edited := mk("1", "totally different")
+	if err := db.UpsertMessage(ctx, edited); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := db.SearchMessages(ctx, "hello", "", 10); len(again) != 1 {
+		t.Fatalf("reindex=%+v", again)
 	}
 }
 

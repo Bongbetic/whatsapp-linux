@@ -1,0 +1,40 @@
+/* WhatsApp-green accent over the system light/dark theme (§9).
+   No hard-coded colors in Go; all accent styling lives here. */
+
+.message-bubble {
+  background-color: @theme_bg_color;
+  border-radius: 12px;
+  padding: 6px 10px;
+}
+
+.message-bubble.outgoing {
+  background-color: #d9fdd3;
+}
+
+.unread-pill {
+  background-color: #25d366;
+  color: white;
+  border-radius: 10px;
+  padding: 0 8px;
+  font-weight: bold;
+}
+
+.dim-label {
+  opacity: 0.65;
+}
+
+.title-1 {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.title-2 {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.monospace {
+  font-family: monospace;
+  font-size: 18px;
+  letter-spacing: 4px;
+}
