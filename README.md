@@ -21,7 +21,8 @@ Built phase-by-phase from `whatsapp-linux.md` (plan; not shipped):
 - [x] Phase 3 — media complete
 - [x] Phase 4 — social complete
 - [ ] Phase 5 — calls (signaling done; media gates need live verification)
-- [ ] Phase 6 — hardening
+- [x] Phase 6 — hardening
+- [ ] Phase 7 — packaging (build + install proven; release on owner OK)
 - [ ] Phase 3 — media complete
 - [ ] Phase 4 — social complete
 - [ ] Phase 5 — calls
@@ -46,10 +47,28 @@ Pinned: whatsmeow `v0.0.0-20261017175727-b2b1e71d45e2`,
 gotk4/pkg `v0.3.1` (do not bump to v0.4.x until Void pango
 ≥ 1.57). Update only via a `chore(deps)` commit + interop pass.
 
+## Install (XBPS)
+
+```sh
+echo 'repository=https://github.com/Bongbetic/whatsapp-linux/releases/latest/download' \
+  | sudo tee /etc/xbps.d/20-whatsapp-linux.conf
+sudo xbps-install -S whatsapp-linux
+```
+
+Updates arrive with `sudo xbps-install -Su`. Before importing the
+key, verify the fingerprint:
+
+```sh
+sudo xbps-install -S whatsapp-linux   # plain -S shows it first
+```
+
+Key fingerprint: `fa:d1:00:32:ce:b1:b9:fd:73:05:05:76:75:54:37:25`
+(`-y` skips the check — don't). First release ships with 0.1.0.
+
 ## Run
 
 ```sh
-./whatsapp-linux [--hidden] [--reset-profile [--full]] [--version] [--debug] [link]
+whatsapp-linux [--hidden] [--reset-profile [--full]] [--version] [--debug] [link]
 ```
 
 First run shows a QR code; link it from your phone

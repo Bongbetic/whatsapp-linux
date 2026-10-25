@@ -1,0 +1,2 @@
+site=https://github.com/Bongbetic/whatsapp-linux/releases/latest
+pattern="(?<=releases/tag/whatsapp-linux-v)[\d.]+"
