@@ -214,6 +214,12 @@ type SyncProgress struct{ Percent int }
 
 func (SyncProgress) Kind() string { return "sync-progress" }
 
+// RefreshEvent asks the UI to re-list chats/messages (WL-1.5
+// app-state sync: pin/mute/archive/star/read changed remotely).
+type RefreshEvent struct{}
+
+func (RefreshEvent) Kind() string { return "refresh" }
+
 // CallEvent carries a call-signaling update (Phase 5).
 type CallEvent struct {
 	ID        string

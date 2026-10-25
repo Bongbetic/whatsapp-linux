@@ -352,6 +352,42 @@ func (e *Engine) handle(raw any) {
 		e.post(receiptToDTO(evt))
 	case *events.HistorySync:
 		e.ingestHistorySync(evt)
+	case *events.AppState, *events.AppStateSyncComplete:
+		e.post(bridge.RefreshEvent{})
+	case *events.Archive:
+		e.applyChatFlag(evt.JID.String(), "archived", evt.Action.GetArchived())
+	case *events.Pin:
+		e.applyChatFlag(evt.JID.String(), "pinned", evt.Action.GetPinned())
+	case *events.Mute:
+		until := evt.Action.GetMuteEndTimestamp()
+		if !evt.Action.GetMuted() {
+			until = 0
+		}
+		e.applyChatMute(evt.JID.String(), until)
+	case *events.Star:
+		if e.db != nil {
+			_ = e.db.SetMessageStarred(context.Background(), evt.ChatJID.String(), evt.MessageID, evt.Action.GetStarred())
+			e.post(bridge.RefreshEvent{})
+		}
+	case *events.MarkChatAsRead:
+		if e.db != nil && evt.Action.GetRead() {
+			e.post(bridge.RefreshEvent{})
+		}
+	case *events.DeleteForMe:
+		if e.db != nil {
+			_ = e.db.DeleteMessage(context.Background(), evt.ChatJID.String(), evt.MessageID)
+			e.post(bridge.RefreshEvent{})
+		}
+	case *events.ClearChat:
+		if e.db != nil {
+			_ = e.db.ClearChat(context.Background(), evt.JID.String())
+			e.post(bridge.RefreshEvent{})
+		}
+	case *events.DeleteChat:
+		if e.db != nil {
+			_ = e.db.DeleteChat(context.Background(), evt.JID.String())
+			e.post(bridge.RefreshEvent{})
+		}
 	case *events.GroupInfo:
 		e.post(groupInfoToDTO(evt))
 	case *events.ChatPresence:
@@ -376,6 +412,38 @@ func (e *Engine) handle(raw any) {
 	case *events.CallReject:
 		_ = e.calls.End(evt.CallID, "rejected")
 	}
+}
+
+// applyChatFlag writes a remote archived/pinned change (WL-1.5).
+func (e *Engine) applyChatFlag(jid, flag string, on bool) {
+	if e.db == nil {
+		return
+	}
+	ctx := context.Background()
+	var err error
+	switch flag {
+	case "archived":
+		err = e.db.SetChatArchived(ctx, jid, on)
+	case "pinned":
+		err = e.db.SetChatPinned(ctx, jid, on)
+	}
+	if err != nil {
+		e.log.Error().Err(err).Msg("app-state chat flag")
+		return
+	}
+	e.post(bridge.RefreshEvent{})
+}
+
+// applyChatMute writes a remote mute change (WL-1.5).
+func (e *Engine) applyChatMute(jid string, until int64) {
+	if e.db == nil {
+		return
+	}
+	if err := e.db.SetChatMuted(context.Background(), jid, until); err != nil {
+		e.log.Error().Err(err).Msg("app-state mute")
+		return
+	}
+	e.post(bridge.RefreshEvent{})
 }
 
 // ensureChat creates the chat row for unknown chats on first message.

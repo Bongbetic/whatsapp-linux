@@ -20,9 +20,10 @@ Built phase-by-phase from `whatsapp-linux.md` (plan; not shipped):
 - [x] Phase 2 — messaging UI (0.1.0 gate: owner daily-driver test)
 - [x] Phase 3 — media complete
 - [x] Phase 4 — social complete
-- [ ] Phase 5 — calls (signaling done; media gates need live verification)
+- [x] Phase 5 — calls signaling (media gates need fork + SIM)
 - [x] Phase 6 — hardening
-- [ ] Phase 7 — packaging (build + install proven; release on owner OK)
+- [x] Phase 7 — packaging (build + install proven; release on owner OK)
+- [x] Phase 8 — parity audit (`PARITY.md`: zero silent gaps)
 - [ ] Phase 3 — media complete
 - [ ] Phase 4 — social complete
 - [ ] Phase 5 — calls

@@ -138,6 +138,86 @@ func TestBackupAndExport(t *testing.T) {
 	}
 }
 
+func TestChatStateSync(t *testing.T) {
+	db, ctx := openTestDB(t)
+	jid := "w@s.whatsapp.net"
+	if err := db.UpsertChat(ctx, bridge.Chat{JID: bridge.JID{User: "w", Server: "s.whatsapp.net"}, Kind: bridge.ChatDM}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertMessage(ctx, bridge.Message{Chat: bridge.JID{User: "w", Server: "s.whatsapp.net"}, ID: "m1", Sender: bridge.JID{User: "w", Server: "s.whatsapp.net"}, Ts: time.Unix(1, 0), Kind: bridge.MsgText, Body: "x", State: bridge.StateSent}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetChatArchived(ctx, jid, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetChatPinned(ctx, jid, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetChatMuted(ctx, jid, 99); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.GetChat(ctx, jid)
+	if err != nil || !got.Archived || !got.Pinned || got.MutedUntil != 99 {
+		t.Fatalf("flags=%+v err=%v", got, err)
+	}
+	if err := db.SetMessageStarred(ctx, jid, "m1", true); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := db.ListMessages(ctx, jid, 10, 0, "")
+	if len(msgs) != 1 || !msgs[0].Starred {
+		t.Fatalf("star=%+v", msgs)
+	}
+	if err := db.DeleteMessage(ctx, jid, "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if msgs, _ := db.ListMessages(ctx, jid, 10, 0, ""); len(msgs) != 0 {
+		t.Fatal("delete-for-me")
+	}
+	if err := db.ClearChat(ctx, jid); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DeleteChat(ctx, jid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.GetChat(ctx, jid); err == nil {
+		t.Fatal("chat should be gone")
+	}
+}
+
+func TestUpgradeAutoBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	// Simulate a v1 database: drop v2 objects, reset version.
+	raw, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{`DROP TRIGGER messages_ai`, `DROP TRIGGER messages_ad`, `DROP TRIGGER messages_au`, `DROP TABLE messages_fts`, `PRAGMA user_version=1`} {
+		if _, err := raw.db.Exec(stmt); err != nil {
+			raw.Close()
+			t.Fatal(err)
+		}
+	}
+	raw.Close()
+	// Reopen: hook must back up, then re-apply 0002.
+	db2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db2.Close()
+	if v, _ := db2.Version(context.Background()); v != 2 {
+		t.Fatalf("version=%d", v)
+	}
+	if _, err := os.Stat(path + ".pre-migrate-v1"); err != nil {
+		t.Fatal("pre-migrate backup missing")
+	}
+}
+
 func TestContactGroupPollCallKV(t *testing.T) {
 	db, ctx := openTestDB(t)
 	c := bridge.Contact{JID: bridge.JID{User: "9", Server: "s.whatsapp.net"}, PushName: "P"}

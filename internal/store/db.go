@@ -57,6 +57,12 @@ func (d *DB) migrate(ctx context.Context) error {
 	if err := d.db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&v); err != nil {
 		return err
 	}
+	// WL-6.2: back up before applying any upgrade migration.
+	if v > 0 && v < len(names) {
+		if err := d.BackupTo(fmt.Sprintf("%s.pre-migrate-v%d", d.path, v)); err != nil {
+			return err
+		}
+	}
 	for i, name := range names {
 		want := i + 1
 		if want <= v {
