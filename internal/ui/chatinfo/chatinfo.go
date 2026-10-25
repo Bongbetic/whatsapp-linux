@@ -16,6 +16,7 @@ type Callbacks struct {
 	OnMute      func(chat bridge.JID, hours int64)
 	OnBlock     func(chat bridge.JID, block bool)
 	OnGroupEdit func(chat bridge.JID) // WL-4.1 member management
+	OnBusiness  func(chat bridge.JID) // WL-4.5 business profile
 }
 
 // View is the chat-info drawer widget.
@@ -48,6 +49,9 @@ func New(cb Callbacks) *View {
 	grp := gtk.NewButtonWithLabel("Members…")
 	grp.ConnectClicked(func() { v.cb.OnGroupEdit(v.chat.JID) })
 	row.Append(grp)
+	biz := gtk.NewButtonWithLabel("Business…")
+	biz.ConnectClicked(func() { v.cb.OnBusiness(v.chat.JID) })
+	row.Append(biz)
 	v.Box.Append(row)
 	return v
 }

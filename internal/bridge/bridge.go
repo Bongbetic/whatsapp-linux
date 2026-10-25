@@ -261,6 +261,29 @@ type CallLog struct {
 	Outcome   string // answered|missed|rejected|failed
 }
 
+// PrivacySettings maps privacy key → value (WL-4.6), e.g.
+// lastseen → "all"|"contacts"|"none". Server-side: read/write
+// through Engine, cached read-only in store kv for offline display.
+type PrivacySettings map[string]string
+
+// BusinessProfile is a business contact's public profile (WL-4.5).
+type BusinessProfile struct {
+	JID         JID
+	Address     string
+	Email       string
+	Description string
+	Categories  []string
+}
+
+// Channel is a followed newsletter's metadata (WL-4.4).
+type Channel struct {
+	JID         JID
+	Name        string
+	Description string
+	Subscribers int
+	Muted       bool
+}
+
 // MsgID is an opaque sent-message id.
 type MsgID string
 
@@ -281,4 +304,32 @@ type Engine interface {
 	MarkRead(ctx context.Context, chat JID, ids ...string) error
 	SetTyping(ctx context.Context, chat JID, typing bool) error
 	DownloadMedia(ctx context.Context, ref MediaRef, w io.Writer) error
+	// Social (Phase 4). Groups/communities.
+	CreateGroup(ctx context.Context, name string, members []JID) (JID, error)
+	GroupMeta(ctx context.Context, group JID) (GroupMeta, error)
+	GroupMembers(ctx context.Context, group JID, members []JID, action string) error
+	GroupSetName(ctx context.Context, group JID, name string) error
+	GroupSetTopic(ctx context.Context, group JID, topic string) error
+	GroupInviteLink(ctx context.Context, group JID, reset bool) (string, error)
+	GroupJoin(ctx context.Context, code string) (JID, error)
+	GroupSubGroups(ctx context.Context, community JID) ([]JID, error)
+	GroupLink(ctx context.Context, parent, child JID) error
+	GroupUnlink(ctx context.Context, parent, child JID) error
+	// Channels (newsletters).
+	ChannelFollow(ctx context.Context, ch JID) error
+	ChannelUnfollow(ctx context.Context, ch JID) error
+	ChannelInfo(ctx context.Context, ch JID) (Channel, error)
+	ChannelSetMute(ctx context.Context, ch JID, mute bool) error
+	// Status.
+	StatusPost(ctx context.Context, text string) error
+	// Privacy & safety.
+	PrivacyGet(ctx context.Context) (PrivacySettings, error)
+	PrivacySet(ctx context.Context, name, value string) error
+	BlocklistGet(ctx context.Context) ([]JID, error)
+	BlockSet(ctx context.Context, user JID, block bool) error
+	DisappearingSet(ctx context.Context, chat JID, secs int64) error
+	// Business.
+	BusinessProfile(ctx context.Context, biz JID) (BusinessProfile, error)
+	// Disappearing default for new chats (WL-4.6).
+	DisappearingDefaultSet(ctx context.Context, secs int64) error
 }
