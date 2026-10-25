@@ -6,6 +6,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/cairo"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/skip2/go-qrcode"
+
+	"github.com/Bongbetic/whatsapp-linux/internal/i18n"
 )
 
 // Bitmap renders the QR modules for code (pure, headless-testable).
@@ -34,7 +36,7 @@ func New(onPhoneCode func(number string) string, cancel func()) *View {
 	v.Box.SetHAlign(gtk.AlignCenter)
 	v.Box.SetVAlign(gtk.AlignCenter)
 
-	title := gtk.NewLabel("Link this device")
+	title := gtk.NewLabel(i18n.T("login.title"))
 	title.AddCSSClass("title-1")
 	v.Box.Append(title)
 
@@ -70,7 +72,7 @@ func New(onPhoneCode func(number string) string, cancel func()) *View {
 	entry := gtk.NewEntry()
 	entry.SetPlaceholderText("Phone number for link code")
 	row.Append(entry)
-	linkBtn := gtk.NewButtonWithLabel("Get code")
+	linkBtn := gtk.NewButtonWithLabel(i18n.T("login.code"))
 	linkBtn.ConnectClicked(func() {
 		code := onPhoneCode(entry.Buffer().Text())
 		v.codeView.SetText("Enter on your phone: " + code)
@@ -78,10 +80,10 @@ func New(onPhoneCode func(number string) string, cancel func()) *View {
 	row.Append(linkBtn)
 	v.Box.Append(row)
 
-	v.status = gtk.NewLabel("Scan the QR code with WhatsApp → Linked devices")
+	v.status = gtk.NewLabel(i18n.T("login.scan"))
 	v.Box.Append(v.status)
 
-	cancelBtn := gtk.NewButtonWithLabel("Cancel")
+	cancelBtn := gtk.NewButtonWithLabel(i18n.T("login.cancel"))
 	cancelBtn.ConnectClicked(cancel)
 	v.Box.Append(cancelBtn)
 	return v

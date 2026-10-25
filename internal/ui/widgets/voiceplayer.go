@@ -26,6 +26,7 @@ func NewVoicePlayer(path string) *VoicePlayer {
 	v.Box = gtk.NewBox(gtk.OrientationHorizontal, 6)
 	v.video = gtk.NewVideoForFilename(path)
 	v.play = gtk.NewButtonFromIconName("media-playback-start-symbolic")
+	v.play.SetTooltipText("Play voice message")
 	v.play.ConnectClicked(func() { v.toggle() })
 	v.Box.Append(v.play)
 	v.seek = gtk.NewScaleWithRange(gtk.OrientationHorizontal, 0, 100, 1)

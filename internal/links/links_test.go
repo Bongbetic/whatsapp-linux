@@ -34,3 +34,32 @@ func TestParse(t *testing.T) {
 		t.Error("expected error for wa.me without phone")
 	}
 }
+
+// FuzzParseLink: parser must never panic; valid schemes yield chat.
+func FuzzParseLink(f *testing.F) {
+	for _, seed := range []string{
+		"whatsapp://send?phone=123&text=hi",
+		"https://wa.me/15551234567?text=x",
+		"tel:+15551234567",
+		"https://example.com/",
+		"",
+		"://",
+		"whatsapp://send?phone=",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, in string) {
+		got, err := links.Parse(in)
+		if err != nil {
+			return
+		}
+		if got.Kind != "chat" || got.Phone == "" {
+			t.Fatalf("bad intent %+v for %q", got, in)
+		}
+		for _, r := range got.Phone {
+			if r < '0' || r > '9' {
+				t.Fatalf("non-digit phone %q", got.Phone)
+			}
+		}
+	})
+}

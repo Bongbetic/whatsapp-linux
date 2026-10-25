@@ -24,7 +24,7 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1)
-	db := &DB{db: sqlDB}
+	db := &DB{db: sqlDB, path: path}
 	if err := db.migrate(context.Background()); err != nil {
 		sqlDB.Close()
 		return nil, err
@@ -33,7 +33,10 @@ func Open(path string) (*DB, error) {
 }
 
 // DB wraps the app database handle.
-type DB struct{ db *sql.DB }
+type DB struct {
+	db   *sql.DB
+	path string
+}
 
 // Close flushes and closes the handle (shutdown path, §8).
 func (d *DB) Close() error { return d.db.Close() }
