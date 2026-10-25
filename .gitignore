@@ -10,8 +10,8 @@ AppxMetadata/
 # Build output
 /dist/
 /build/
-whatsapp-linux
-wlprobe
+/whatsapp-linux
+/wlprobe
 *.o
 *.a
 

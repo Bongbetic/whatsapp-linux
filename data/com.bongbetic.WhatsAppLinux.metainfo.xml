@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.bongbetic.WhatsAppLinux</id>
+  <name>WhatsApp (unofficial)</name>
+  <summary>Unofficial native WhatsApp client for Linux</summary>
+  <description>
+    <p>
+      whatsapp-linux is an unofficial native Linux client for WhatsApp.
+      It speaks the WhatsApp multi-device companion protocol directly
+      and renders a native GTK 4 interface. Not affiliated with
+      WhatsApp LLC or Meta.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.bongbetic.WhatsAppLinux.desktop</launchable>
+  <url type="homepage">https://github.com/Bongbetic/whatsapp-linux</url>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT AND MPL-2.0 AND GPL-3.0-only</project_license>
+  <developer id="com.bongbetic">
+    <name>Bongbetic</name>
+  </developer>
+  <branding>
+    <color type="primary" scheme_preference="light">#25D366</color>
+  </branding>
+</component>

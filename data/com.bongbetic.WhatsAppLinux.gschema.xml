@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="com.bongbetic.WhatsAppLinux" path="/com/bongbetic/WhatsAppLinux/">
+    <key name="autostart" type="b">
+      <default>true</default>
+      <summary>Start on login</summary>
+    </key>
+    <key name="close-to-tray" type="b">
+      <default>true</default>
+      <summary>Keep running in tray when the window closes</summary>
+    </key>
+    <key name="start-hidden" type="b">
+      <default>false</default>
+      <summary>Start hidden in tray</summary>
+    </key>
+    <key name="enter-to-send" type="b">
+      <default>true</default>
+      <summary>Enter sends, Shift+Enter inserts a newline</summary>
+    </key>
+    <key name="font-scale" type="d">
+      <default>1.0</default>
+      <summary>Chat font scale</summary>
+    </key>
+    <key name="download-dir" type="s">
+      <default>''</default>
+      <summary>Manual download directory (empty = XDG Downloads)</summary>
+    </key>
+    <key name="auto-download-photos" type="b">
+      <default>true</default>
+      <summary>Auto-download photos</summary>
+    </key>
+    <key name="auto-download-audio" type="b">
+      <default>true</default>
+      <summary>Auto-download voice notes and audio</summary>
+    </key>
+    <key name="auto-download-video" type="b">
+      <default>false</default>
+      <summary>Auto-download video</summary>
+    </key>
+    <key name="auto-download-docs" type="b">
+      <default>false</default>
+      <summary>Auto-download documents</summary>
+    </key>
+    <key name="notify-preview" type="b">
+      <default>true</default>
+      <summary>Show message text in notifications</summary>
+    </key>
+    <key name="notify-sound" type="b">
+      <default>true</default>
+      <summary>Play a sound with notifications</summary>
+    </key>
+    <key name="spellcheck" type="b">
+      <default>true</default>
+      <summary>Spell-check the composer</summary>
+    </key>
+    <key name="low-data-calls" type="b">
+      <default>false</default>
+      <summary>Low-data mode for calls</summary>
+    </key>
+    <key name="window-w" type="i">
+      <default>1180</default>
+      <summary>Last window width (internal)</summary>
+    </key>
+    <key name="window-h" type="i">
+      <default>760</default>
+      <summary>Last window height (internal)</summary>
+    </key>
+    <key name="window-x" type="i">
+      <default>-1</default>
+      <summary>Last window X (internal)</summary>
+    </key>
+    <key name="window-y" type="i">
+      <default>-1</default>
+      <summary>Last window Y (internal)</summary>
+    </key>
+  </schema>
+</schemalist>

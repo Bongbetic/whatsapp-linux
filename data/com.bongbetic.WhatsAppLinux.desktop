@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=WhatsApp (unofficial)
+Comment=Unofficial native WhatsApp client for Linux
+Exec=whatsapp-linux %U
+Icon=com.bongbetic.WhatsAppLinux
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+StartupWMClass=com.bongbetic.WhatsAppLinux
+MimeType=x-scheme-handler/whatsapp;x-scheme-handler/tel;
+Keywords=whatsapp;chat;message;
