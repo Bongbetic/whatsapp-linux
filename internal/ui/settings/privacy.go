@@ -29,7 +29,7 @@ var privacyKeys = []struct {
 // Values load async; offline shows the cached kv copy marked stale.
 func PrivacySection(eng bridge.Engine, log zerolog.Logger) *gtk.Box {
 	box := gtk.NewBox(gtk.OrientationVertical, 6)
-	box.Append(gtk.NewLabel("Privacy (server-side)"))
+	box.Append(Section("Privacy (server-side)"))
 	rows := gtk.NewBox(gtk.OrientationVertical, 2)
 	box.Append(rows)
 	status := gtk.NewLabel("loading…")

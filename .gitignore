@@ -1,11 +1,13 @@
 # Reference artifacts (never committed) — plan §1
 *.msix
+*.Msix
 *.MsixBundle
 *.msixbundle
 *.Appx
 *.appx
 *.exe
 AppxMetadata/
+/screenshots/
 
 # Build output
 /dist/
@@ -13,6 +15,8 @@ AppxMetadata/
 /stage/
 /whatsapp-linux
 /wlprobe
+/wlshot
+/shots/
 *.o
 *.a
 

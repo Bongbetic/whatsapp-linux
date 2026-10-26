@@ -12,8 +12,10 @@ import (
 // chat plus clear-cache. Appended to the settings stack by the shell.
 func StorageSection(dataDir, cacheDir string) *gtk.Box {
 	box := gtk.NewBox(gtk.OrientationVertical, 6)
-	box.Append(gtk.NewLabel("Storage"))
+	box.Append(Section("Storage"))
 	usage := gtk.NewLabel("calculating…")
+	usage.SetXAlign(0)
+	usage.AddCSSClass("drawer-caption")
 	box.Append(usage)
 	refresh := func() {
 		m, err := media.UsageByChat(dataDir)
@@ -28,7 +30,7 @@ func StorageSection(dataDir, cacheDir string) *gtk.Box {
 		usage.SetText(fmt.Sprintf("%d chats use %s of media", len(m), humanBytes(total)))
 	}
 	refresh()
-	clear := gtk.NewButtonWithLabel("Clear thumbnail cache")
+	clear := actionButton("Clear thumbnail cache")
 	clear.ConnectClicked(func() {
 		if err := media.ClearCache(cacheDir); err != nil {
 			usage.SetText("clear failed: " + err.Error())

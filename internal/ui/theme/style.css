@@ -1,0 +1,1074 @@
+/* whatsapp-linux look, matched to WhatsApp Desktop for Windows
+   2.2639 (§9). Colors are the reference client's design-system
+   tokens (light and dark); names in comments give the token each
+   variable mirrors. Go code references class names only.
+   Needs GTK >= 4.20 (CSS variables, prefers-color-scheme). */
+
+:root {
+  --accent: #1DAA61;              /* WdsAccent */
+  --accent-deemph: #D9FDD3;       /* WdsAccentDeemphasized */
+  --accent-emph: #15603E;         /* WdsAccentEmphasized */
+  --on-accent: #FFFFFF;           /* WdsContentOnAccent */
+  --link: #1B8755;                /* WdsContentActionEmphasized */
+  --negative: #EA0038;            /* WdsSecondaryNegative */
+  --warning: #FFB938;             /* WdsSecondaryWarning */
+  --fg: #0A0A0A;                  /* WdsContentDefault */
+  --fg-2: rgba(0, 0, 0, 0.6);     /* WdsContentDeemphasized */
+  --fg-disabled: #BDBDBD;         /* WdsContentDisabled */
+  --read: #007BFC;                /* WdsContentRead */
+  --surface: #FFFFFF;             /* WdsSurfaceDefault, ChatlistPanelBackground */
+  --surface-emph: #F7F5F3;        /* WdsSurfaceEmphasized, NavbarBackground */
+  --surface-elev: #FFFFFF;        /* WdsSurfaceElevatedDefault */
+  --hover: #F7F5F3;               /* BackgroundDefaultHover */
+  --selected: rgba(194, 189, 184, 0.30); /* BackgroundDefaultActive, stronger */
+  --press: rgba(0, 0, 0, 0.08);
+  --border: rgba(0, 0, 0, 0.1);   /* BorderPanel */
+  --nav-active: rgba(0, 0, 0, 0.08); /* NavbarItemActiveBackground */
+  --wallpaper: #F5F1EB;           /* WdsSystemsChatBackgroundWallpaper */
+  --bubble-in: #FFFFFF;           /* WdsSystemsBubbleSurfaceIncoming */
+  --bubble-out: #D9FDD3;          /* WdsSystemsBubbleSurfaceOutgoing */
+  --bubble-system: rgba(255, 255, 255, 0.9); /* WdsSystemsBubbleSurfaceSystem */
+  --bubble-e2e: #FFF0D4;          /* WdsSystemsBubbleSurfaceE2e */
+  --bubble-e2e-fg: rgba(0, 0, 0, 0.6);
+  --bubble-shadow: rgba(11, 20, 26, 0.13);
+  --unread-bar: rgba(194, 189, 184, 0.15); /* UnreadBarBackground */
+  --composer: #FFFFFF;            /* WdsSystemsChatSurfaceComposer */
+  --input: #F7F5F3;               /* SearchInputBackground */
+  --chip: #F7F5F3;                /* FiltersItemBackground */
+  --chip-active: #D9FDD3;         /* FiltersItemActiveBackground */
+  --chip-active-fg: #15603E;
+  --chip-border: rgba(0, 0, 0, 0.15);
+  --chip-active-border: rgba(29, 170, 97, 0.35);
+  --avatar: #E9E6E3;
+  --avatar-fg: rgba(0, 0, 0, 0.3);
+  --intro: #F7F5F3;               /* IntroBackground */
+  --tooltip: #242626;             /* TooltipBackground */
+  --tooltip-fg: #FAFAFA;
+  --menu-shadow: rgba(11, 20, 26, 0.2);
+  --caption-hover: rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #21C063;
+    --accent-deemph: #103529;
+    --accent-emph: #D9FDD3;
+    --on-accent: #0A0A0A;
+    --link: #21C063;
+    --negative: #FB5061;
+    --warning: #FFD279;
+    --fg: #FAFAFA;
+    --fg-2: rgba(255, 255, 255, 0.6);
+    --fg-disabled: #424445;
+    --read: #53BDEB;
+    --surface: #161717;
+    --surface-emph: #1D1F1F;
+    --surface-elev: #1D1F1F;
+    --hover: #242626;
+    --selected: rgba(255, 255, 255, 0.1);
+    --press: rgba(255, 255, 255, 0.12);
+    --border: rgba(255, 255, 255, 0.1);
+    --nav-active: rgba(255, 255, 255, 0.1);
+    --wallpaper: #161717;
+    --bubble-in: #242626;
+    --bubble-out: #144D37;
+    --bubble-system: #1D1F1F;
+    --bubble-e2e: #1D1F1F;
+    --bubble-e2e-fg: #FFD279;
+    --bubble-shadow: rgba(0, 0, 0, 0.25);
+    --unread-bar: rgba(255, 255, 255, 0.06);
+    --composer: #242626;
+    --input: #242626;
+    --chip: #242626;
+    --chip-active: #103529;
+    --chip-active-fg: #D9FDD3;
+    --chip-border: rgba(255, 255, 255, 0.15);
+    --chip-active-border: rgba(33, 192, 99, 0.35);
+    --avatar: #2E3030;
+    --avatar-fg: rgba(255, 255, 255, 0.35);
+    --intro: #161717;
+    --tooltip: #EEEEEE;
+    --tooltip-fg: #0A0A0A;
+    --menu-shadow: rgba(0, 0, 0, 0.5);
+    --caption-hover: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ---- base ---------------------------------------------------- */
+
+window {
+  font-family: "Segoe UI Variable Text", "Segoe UI", Inter, Cantarell, sans-serif;
+  font-size: 14px;
+  color: var(--fg);
+}
+
+window.background {
+  background-color: var(--surface-emph);
+}
+
+window.csd {
+  border-radius: 8px;
+}
+
+label.dim-label,
+.dim-label {
+  color: var(--fg-2);
+  opacity: 1;
+}
+
+.title-1 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.title-2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.monospace {
+  font-family: monospace;
+  font-size: 18px;
+  letter-spacing: 4px;
+}
+
+selection,
+text > selection {
+  background-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: inherit;
+}
+
+*:focus-visible {
+  outline-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+tooltip.background {
+  background-color: var(--tooltip);
+  color: var(--tooltip-fg);
+  border-radius: 6px;
+  border: none;
+  box-shadow: none;
+}
+
+tooltip > box > label {
+  color: var(--tooltip-fg);
+  font-size: 12px;
+}
+
+scrollbar {
+  background-color: transparent;
+  border: none;
+}
+
+scrollbar slider {
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--fg) 20%, transparent);
+  border: none;
+}
+
+scrollbar slider:hover {
+  background-color: color-mix(in srgb, var(--fg) 35%, transparent);
+}
+
+/* ---- buttons --------------------------------------------------- */
+
+button {
+  border-radius: 999px;
+  background-image: none;
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+
+button.text-button {
+  padding: 6px 18px;
+  min-height: 24px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--link);
+  font-weight: 500;
+}
+
+button.text-button:hover {
+  background-color: var(--hover);
+}
+
+button.text-button:active {
+  background-color: var(--press);
+}
+
+button.suggested-action,
+button.suggested-action:hover,
+button.suggested-action:active {
+  background-image: none;
+  background-color: var(--accent);
+  border-color: transparent;
+  color: var(--on-accent);
+  box-shadow: none;
+}
+
+button.suggested-action:hover {
+  background-color: color-mix(in srgb, var(--accent) 85%, var(--fg));
+}
+
+button.destructive-action,
+button.destructive-action:hover,
+button.destructive-action:active {
+  background-image: none;
+  background-color: var(--negative);
+  border-color: transparent;
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+button.image-button,
+button.flat,
+.icon-btn {
+  background-color: transparent;
+  border: none;
+  color: var(--fg);
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+
+button.image-button:hover,
+button.flat:hover,
+.icon-btn:hover {
+  background-color: var(--press);
+}
+
+button.image-button:active,
+.icon-btn:active,
+.icon-btn:checked {
+  background-color: color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+button.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--link);
+}
+
+button.link-btn label {
+  text-decoration-line: underline;
+}
+
+/* ---- inputs ------------------------------------------------------- */
+
+entry {
+  background-color: var(--input);
+  background-image: none;
+  border: none;
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--fg);
+  min-height: 38px;
+  padding: 0 12px;
+  outline: none;
+}
+
+entry:focus-within {
+  box-shadow: inset 0 -2px var(--accent);
+}
+
+entry > text > placeholder,
+entry > text > block-cursor {
+  color: var(--fg-2);
+}
+
+entry > image {
+  color: var(--fg-2);
+}
+
+textview,
+textview > text {
+  background-color: transparent;
+  color: var(--fg);
+}
+
+switch {
+  background-color: color-mix(in srgb, var(--fg) 25%, transparent);
+  background-image: none;
+  border: none;
+  border-radius: 999px;
+}
+
+switch:checked {
+  background-color: var(--accent);
+}
+
+switch > slider {
+  background-color: #FFFFFF;
+  background-image: none;
+  border: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+}
+
+check:checked,
+radio:checked {
+  background-color: var(--accent);
+  background-image: none;
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+scale highlight,
+progressbar progress {
+  background-color: var(--accent);
+  background-image: none;
+  border-color: var(--accent);
+}
+
+/* ---- menus, dialogs ------------------------------------------- */
+
+popover.background > contents,
+popover.background > arrow {
+  background-color: var(--surface-elev);
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 5px var(--menu-shadow), 0 8px 24px var(--menu-shadow);
+  color: var(--fg);
+}
+
+popover.menu modelbutton {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+}
+
+popover.menu modelbutton:selected,
+popover.menu modelbutton:hover {
+  background-color: var(--hover);
+  color: var(--fg);
+}
+
+window.dialog.background,
+dialog.background {
+  background-color: var(--surface-elev);
+}
+
+/* ---- title bar (Windows caption) ------------------------------- */
+
+headerbar,
+headerbar:backdrop {
+  min-height: 32px;
+  padding: 0;
+  background-color: var(--surface-emph);
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  color: var(--fg);
+}
+
+headerbar > windowhandle > box {
+  border-spacing: 0;
+}
+
+headerbar .app-title {
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+headerbar .app-icon {
+  margin-left: 14px;
+  -gtk-icon-size: 16px;
+}
+
+headerbar .conn-dot {
+  font-size: 9px;
+  margin-left: 8px;
+  color: var(--fg-2);
+}
+
+headerbar .conn-dot.offline {
+  color: var(--warning);
+}
+
+headerbar windowcontrols {
+  border-spacing: 0;
+  margin: 0;
+}
+
+headerbar windowcontrols.end {
+  margin-right: 0;
+}
+
+headerbar windowcontrols > button,
+headerbar windowcontrols > button:backdrop {
+  min-width: 46px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--fg);
+}
+
+headerbar windowcontrols.end > button:last-child {
+  padding-right: 0;
+  border-top-right-radius: 8px;
+}
+
+headerbar windowcontrols > button > image,
+headerbar windowcontrols > button:hover > image {
+  background: none;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  -gtk-icon-size: 14px;
+}
+
+headerbar windowcontrols > button:hover {
+  background-color: var(--caption-hover);
+}
+
+headerbar windowcontrols > button.close:hover {
+  background-color: #C42B1C;
+  color: #FFFFFF;
+}
+
+headerbar windowcontrols > button.close:active {
+  background-color: #C8453A;
+  color: #FFFFFF;
+}
+
+window:backdrop headerbar .app-title,
+headerbar:backdrop windowcontrols > button {
+  color: var(--fg-2);
+}
+
+/* ---- navigation rail --------------------------------------------- */
+
+.rail {
+  background-color: var(--surface-emph);
+  padding: 6px 8px 12px 8px;
+}
+
+.content-card {
+  background-color: var(--surface);
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-top-left-radius: 10px;
+}
+
+.rail-btn {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background-color: transparent;
+  color: color-mix(in srgb, var(--fg) 80%, transparent);
+}
+
+.rail-btn image {
+  -gtk-icon-size: 24px;
+}
+
+.rail-btn:hover {
+  background-color: var(--press);
+}
+
+.rail-btn.active {
+  background-color: var(--nav-active);
+  color: var(--fg);
+}
+
+.rail-sep {
+  background-color: var(--border);
+  min-height: 1px;
+  margin: 6px 6px;
+}
+
+.rail-badge {
+  background-color: var(--accent);
+  color: var(--on-accent);
+  border-radius: 999px;
+  min-width: 12px;
+  min-height: 18px;
+  padding: 0 3px;
+  margin: -3px -4px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px var(--surface-emph);
+}
+
+paned > separator {
+  min-width: 1px;
+  min-height: 1px;
+  background-color: var(--border);
+  background-image: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* ---- side panels (chat list, settings, status, calls...) -------- */
+
+.side-panel {
+  background-color: var(--surface);
+}
+
+.pane-header {
+  padding: 12px 12px 4px 20px;
+  min-height: 48px;
+}
+
+.pane-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.side-panel list,
+.side-panel list > row {
+  background-color: transparent;
+}
+
+entry.search-pill {
+  margin: 4px 16px 8px 16px;
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 0 14px;
+  background-color: var(--input);
+}
+
+entry.search-pill:focus-within {
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+entry.search-pill > image {
+  -gtk-icon-size: 18px;
+  margin-right: 6px;
+}
+
+.filter-row {
+  margin: 0 16px 8px 16px;
+}
+
+button.filter-pill {
+  min-height: 0;
+  padding: 4px 11px;
+  border: 1px solid var(--chip-border);
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--fg-2);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+button.filter-pill:hover {
+  background-color: var(--hover);
+}
+
+button.filter-pill.active {
+  background-color: var(--chip-active);
+  border-color: var(--chip-active-border);
+  color: var(--chip-active-fg);
+  font-weight: 500;
+}
+
+list.chat-list > row {
+  margin: 0 8px;
+  padding: 0 12px;
+  min-height: 72px;
+  border-radius: 10px;
+  outline: none;
+}
+
+list.chat-list > row:hover {
+  background-color: var(--hover);
+}
+
+list.chat-list > row:selected,
+list.chat-list > row:selected:hover {
+  background-color: var(--selected);
+  color: var(--fg);
+}
+
+.chat-row-name {
+  font-size: 16px;
+}
+
+.chat-row-preview {
+  font-size: 14px;
+  color: var(--fg-2);
+}
+
+.chat-row-time {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.chat-row-time.unread {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.chat-row-mark {
+  color: var(--fg-2);
+  -gtk-icon-size: 16px;
+}
+
+.unread-pill {
+  background-color: var(--accent);
+  color: var(--on-accent);
+  border-radius: 999px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.archived-row {
+  padding: 10px 24px 10px 32px;
+  min-height: 48px;
+}
+
+.archived-row label {
+  font-size: 16px;
+}
+
+.banner-bar {
+  background-color: var(--accent-deemph);
+  color: var(--fg);
+  padding: 12px 20px;
+}
+
+.banner-bar.warning {
+  background-color: color-mix(in srgb, var(--warning) 35%, var(--surface));
+}
+
+/* ---- avatars -------------------------------------------------------- */
+
+.avatar {
+  background-color: var(--avatar);
+  color: var(--avatar-fg);
+  border-radius: 999px;
+}
+
+/* ---- conversation ------------------------------------------------- */
+
+.convo {
+  background-color: var(--wallpaper);
+}
+
+.convo-header {
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--border);
+  min-height: 64px;
+  padding: 0 16px;
+}
+
+.convo-name {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.convo-presence {
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.convo-header .icon-btn image {
+  -gtk-icon-size: 22px;
+}
+
+.chat-bg,
+.chat-bg > row {
+  background-color: transparent;
+}
+
+list.chat-bg {
+  padding: 8px 0 12px 0;
+}
+
+list.chat-bg > row {
+  padding: 0;
+  outline: none;
+}
+
+/* Side gutters sit on the row content, not the row, so the unread
+   band can span the full width without negative margins. */
+.msg-row,
+.date-pill-row,
+.e2e-note-row {
+  margin-left: 64px;
+  margin-right: 64px;
+}
+
+list.chat-bg > row:selected {
+  background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.msg-row {
+  margin-top: 2px;
+}
+
+.msg-row.first {
+  margin-top: 10px;
+}
+
+.message-bubble {
+  background-color: var(--bubble-in);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 6px 8px 6px 9px;
+  box-shadow: 0 1px 0.5px var(--bubble-shadow);
+}
+
+.message-bubble.outgoing {
+  background-color: var(--bubble-out);
+}
+
+.message-bubble.tail {
+  border-top-left-radius: 0;
+}
+
+.message-bubble.outgoing.tail {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 0;
+}
+
+.bubble-text {
+  font-size: 14.2px;
+}
+
+.bubble-sender {
+  font-size: 12.8px;
+  font-weight: 600;
+}
+
+.bubble-meta,
+.tick {
+  font-size: 11px;
+  color: var(--fg-2);
+}
+
+.tick.read {
+  color: var(--read);
+}
+
+.date-pill {
+  background-color: var(--bubble-system);
+  color: var(--fg-2);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  margin: 12px 0 6px 0;
+  box-shadow: 0 1px 0.5px var(--bubble-shadow);
+}
+
+.unread-divider-row {
+  background-color: var(--unread-bar);
+  margin: 10px 0;
+  padding: 5px 0;
+}
+
+.unread-divider {
+  background-color: var(--bubble-system);
+  color: var(--fg-2);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12.5px;
+  box-shadow: 0 1px 0.5px var(--bubble-shadow);
+}
+
+.e2e-note {
+  background-color: var(--bubble-e2e);
+  color: var(--bubble-e2e-fg);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  margin: 8px 0;
+  box-shadow: 0 1px 0.5px var(--bubble-shadow);
+}
+
+.reply-bar {
+  background-color: var(--surface);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 16px 6px 16px;
+  color: var(--fg-2);
+}
+
+.find-bar {
+  background-color: var(--surface);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.composer-tray {
+  padding: 6px 16px 14px 16px;
+}
+
+.composer-pill {
+  background-color: var(--composer);
+  border-radius: 26px;
+  padding: 4px 6px;
+  min-height: 44px;
+  box-shadow: 0 1px 2px var(--bubble-shadow);
+}
+
+.composer-pill > button {
+  color: var(--fg-2);
+}
+
+.composer-pill > button:hover {
+  color: var(--fg);
+}
+
+.composer-pill textview,
+.composer-pill textview > text {
+  background-color: transparent;
+  font-size: 15px;
+}
+
+.composer-pill scrolledwindow {
+  background-color: transparent;
+}
+
+.composer-placeholder {
+  color: var(--fg-2);
+  font-size: 15px;
+}
+
+button.send-btn,
+button.send-btn:hover {
+  background-color: var(--accent);
+  color: var(--on-accent);
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 999px;
+}
+
+button.send-btn:hover {
+  background-color: color-mix(in srgb, var(--accent) 85%, var(--fg));
+}
+
+button.recording {
+  color: var(--negative);
+}
+
+.emoji-drawer {
+  background-color: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+
+.emoji-drawer button {
+  min-width: 36px;
+  min-height: 36px;
+  font-size: 22px;
+  padding: 0;
+  border-radius: 8px;
+  background: none;
+  border: none;
+}
+
+.emoji-drawer button:hover {
+  background-color: var(--hover);
+}
+
+/* empty conversation pane / page intro */
+
+.intro-panel {
+  background-color: var(--intro);
+}
+
+.intro-icon {
+  color: var(--fg-2);
+  -gtk-icon-size: 72px;
+  margin-bottom: 12px;
+}
+
+.intro-title {
+  font-size: 30px;
+  font-weight: 300;
+}
+
+.intro-text {
+  font-size: 14px;
+  color: var(--fg-2);
+}
+
+.intro-foot {
+  font-size: 13px;
+  color: var(--fg-2);
+  margin-bottom: 36px;
+}
+
+/* ---- chat info drawer -------------------------------------------- */
+
+.info-drawer {
+  background-color: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.drawer-header {
+  min-height: 64px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drawer-name {
+  font-size: 22px;
+}
+
+.drawer-section {
+  border-top: 8px solid var(--surface-emph);
+  padding: 14px 24px;
+}
+
+.drawer-caption {
+  font-size: 14px;
+  color: var(--fg-2);
+}
+
+button.drawer-action {
+  border-radius: 0;
+  min-height: 52px;
+  padding: 0 24px;
+  background-color: transparent;
+  border: none;
+  color: var(--fg);
+  font-weight: 400;
+}
+
+button.drawer-action:hover {
+  background-color: var(--hover);
+}
+
+button.drawer-action.danger {
+  color: var(--negative);
+}
+
+/* ---- login ------------------------------------------------------- */
+
+.login-page {
+  background-color: var(--intro);
+}
+
+.login-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 44px 52px 32px 52px;
+  margin: 24px;
+}
+
+.login-title {
+  font-size: 28px;
+  font-weight: 300;
+  margin-bottom: 6px;
+}
+
+.login-step {
+  font-size: 16px;
+}
+
+.step-num {
+  border: 1px solid var(--fg-2);
+  border-radius: 999px;
+  min-width: 24px;
+  min-height: 24px;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.qr-frame {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.login-code {
+  font-size: 22px;
+  letter-spacing: 3px;
+}
+
+.login-status {
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.login-foot {
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+/* ---- settings and other pages -------------------------------------- */
+
+.page-content {
+  padding: 4px 20px 20px 20px;
+}
+
+.section-title {
+  color: var(--link);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 18px;
+  margin-bottom: 6px;
+}
+
+.setting-row {
+  min-height: 44px;
+}
+
+.page-content button.drawer-action {
+  min-height: 44px;
+  padding: 0 8px;
+  margin: 0 -8px;
+  border-radius: 10px;
+}
+
+.page-content entry.search-pill {
+  margin: 4px 0 8px 0;
+}
+
+.page-content .filter-row {
+  margin: 0 0 4px 0;
+}
+
+.page-content list.chat-list > row {
+  margin: 0 -12px;
+}
+
+.negative {
+  color: var(--negative);
+}
+
+.page-content list,
+.page-content list > row {
+  background-color: transparent;
+}
+
+.page-content list > row {
+  min-height: 52px;
+  border-radius: 10px;
+  padding: 0 8px;
+}
+
+.page-content list > row:hover {
+  background-color: var(--hover);
+}
+
+/* ---- calls ---------------------------------------------------------- */
+
+.call-window {
+  background-color: #0B141A;
+  color: #FFFFFF;
+}

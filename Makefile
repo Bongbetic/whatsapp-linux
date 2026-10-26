@@ -11,6 +11,16 @@ build:
 wlprobe:
 	CGO_ENABLED=1 $(GO) build -tags "$(TAGS)" -trimpath ./cmd/wlprobe
 
+wlshot:
+	CGO_ENABLED=1 $(GO) build -tags "$(TAGS)" -trimpath ./cmd/wlshot
+
+shots: wlshot
+	mkdir -p shots
+	xvfb-run -a ./wlshot --page chat --out shots/chat.png
+	xvfb-run -a ./wlshot --page list --out shots/list.png
+	xvfb-run -a ./wlshot --page login --out shots/login.png
+	xvfb-run -a ./wlshot --page chat --dark --out shots/chat-dark.png
+
 test:
 	$(GO) test -tags "$(TAGS)" ./...
 
@@ -30,6 +40,6 @@ sounds:
 	go run ./tools/gensounds data/sounds
 
 clean:
-	rm -f whatsapp-linux wlprobe
+	rm -f whatsapp-linux wlprobe wlshot
 
-.PHONY: all build wlprobe test test-race vet fmt smoke sounds clean
+.PHONY: all build wlprobe wlshot shots test test-race vet fmt smoke sounds clean

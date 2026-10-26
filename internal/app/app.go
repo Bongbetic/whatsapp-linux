@@ -6,14 +6,12 @@ package app
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
-	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/rs/zerolog"
@@ -39,6 +37,7 @@ import (
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/login"
 	uisettings "github.com/Bongbetic/whatsapp-linux/internal/ui/settings"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/status"
+	"github.com/Bongbetic/whatsapp-linux/internal/ui/theme"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/widgets"
 )
 
@@ -53,31 +52,33 @@ type App struct {
 	hidden   bool
 	links    []links.Intent
 	linkCh   <-chan string
+	shot     *ShotConfig // dev-only screenshot mode (shot.go)
 
 	dataDir  string
 	cacheDir string
 
-	win      *gtk.ApplicationWindow
-	connLbl  *gtk.Label
-	banner   *gtk.Revealer
-	bannerL  *gtk.Label
-	stack    *gtk.Stack
-	paned    *gtk.Paned
-	rail     *gtk.Box
-	railBtn  map[string]*gtk.Button
-	voice    *media.Recorder
-	loginV   *login.View
-	chatsV   *chatlist.View
-	convV    *convo.View
-	infoV    *chatinfo.View
-	statusV  *status.View
-	chansV   *channels.View
-	callsV   *calls.View
-	callWin  *call.Window
-	callID   string
-	ringID   string
-	ringStop chan struct{}
-	notif    *notify.Notifier
+	win       *gtk.ApplicationWindow
+	connLbl   *gtk.Label
+	banner    *gtk.Revealer
+	bannerL   *gtk.Label
+	stack     *gtk.Stack
+	paned     *gtk.Paned
+	rail      *gtk.Box
+	railBtn   map[string]*gtk.Button
+	railBadge *gtk.Label
+	voice     *media.Recorder
+	loginV    *login.View
+	chatsV    *chatlist.View
+	convV     *convo.View
+	infoV     *chatinfo.View
+	statusV   *status.View
+	chansV    *channels.View
+	callsV    *calls.View
+	callWin   *call.Window
+	callID    string
+	ringID    string
+	ringStop  chan struct{}
+	notif     *notify.Notifier
 
 	narrow     bool // single-pane layout under narrowWidth
 	narrowList bool // narrow mode currently shows the list (not convo)
@@ -100,48 +101,74 @@ type Config struct {
 	// single-instance forwards from later invocations (single.go).
 	Links  []links.Intent
 	LinkCh <-chan string
+	// Shot enables dev-only screenshot mode (cmd/wlshot).
+	Shot *ShotConfig
 }
 
 // Run starts the application (blocks until quit). No GTK calls happen
 // before this, so headless commands can build Config without a display.
 func Run(cfg Config) int {
-	a := &App{engine: cfg.Engine, db: cfg.DB, settings: cfg.Settings, log: cfg.Log, version: cfg.Version, hidden: cfg.Hidden, dataDir: cfg.DataDir, cacheDir: cfg.CacheDir, links: cfg.Links, linkCh: cfg.LinkCh}
-	a.gtkApp = gtk.NewApplication(bridge.AppID, gio.ApplicationHandlesOpen)
+	a := &App{engine: cfg.Engine, db: cfg.DB, settings: cfg.Settings, log: cfg.Log, version: cfg.Version, hidden: cfg.Hidden, dataDir: cfg.DataDir, cacheDir: cfg.CacheDir, links: cfg.Links, linkCh: cfg.LinkCh, shot: cfg.Shot}
+	a.gtkApp = gtk.NewApplication(bridge.AppID, appFlags(cfg))
 	a.gtkApp.ConnectActivate(a.activate)
 	return a.gtkApp.Run(nil)
 }
 
 func (a *App) activate() {
+	a.shotDark()
 	a.win = gtk.NewApplicationWindow(a.gtkApp)
 	a.win.SetTitle(bridge.DisplayName)
 	a.win.SetDefaultSize(a.settings.GetInt(settings.KeyWindowW), a.settings.GetInt(settings.KeyWindowH))
+	theme.Install(gdk.DisplayGetDefault(), a.cacheDir, a.log)
 
+	// Windows-style caption: app icon + name on the left, flat
+	// minimize/maximize/close on the right, no centered title.
 	bar := gtk.NewHeaderBar()
+	bar.SetDecorationLayout(":minimize,maximize,close")
+	appIcon := gtk.NewImageFromIconName(bridge.AppID)
+	appIcon.AddCSSClass("app-icon")
+	bar.PackStart(appIcon)
+	title := gtk.NewLabel(bridge.DisplayName)
+	title.AddCSSClass("app-title")
+	bar.PackStart(title)
 	a.connLbl = gtk.NewLabel("●")
+	a.connLbl.AddCSSClass("conn-dot")
 	a.connLbl.SetTooltipText("Connecting…")
 	bar.PackStart(a.connLbl)
-	title := gtk.NewLabel("WhatsApp")
-	title.AddCSSClass("title-2")
-	bar.SetTitleWidget(title)
+	bar.SetTitleWidget(gtk.NewBox(gtk.OrientationHorizontal, 0))
 	a.win.SetTitlebar(bar)
 
-	a.banner, a.bannerL = widgets.Banner()
-	root := gtk.NewBox(gtk.OrientationVertical, 0)
-	root.Append(a.banner)
-
-	body := gtk.NewBox(gtk.OrientationHorizontal, 0)
-	root.Append(body)
+	// Rail on the left at full height; the banner sits above the
+	// page area, like the reference client's chat-list butterbar.
+	root := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	a.buildRail()
-	body.Append(a.rail)
+	root.Append(a.rail)
+	column := gtk.NewBox(gtk.OrientationVertical, 0)
+	column.SetHExpand(true)
+	// The content sits in a card inset from the caption bar and rail,
+	// with a rounded top-left corner like the reference client.
+	column.AddCSSClass("content-card")
+	column.SetOverflow(gtk.OverflowHidden)
+	root.Append(column)
+	a.banner, a.bannerL = widgets.Banner()
+	column.Append(a.banner)
 
 	a.stack = gtk.NewStack()
 	a.stack.SetHExpand(true)
-	body.Append(a.stack)
+	a.stack.SetVExpand(true)
+	column.Append(a.stack)
 	main := gtk.NewBox(gtk.OrientationVertical, 0)
 	a.paned = gtk.NewPaned(gtk.OrientationHorizontal)
+	a.paned.SetVExpand(true)
+	a.paned.SetWideHandle(false)
+	a.paned.SetResizeStartChild(false)
+	a.paned.SetShrinkStartChild(false)
+	a.paned.SetShrinkEndChild(false)
+	a.paned.SetPosition(chatListWidth)
 
 	a.chatsV = chatlist.New(a.openChat, func() { dialogs.NewChat(a.win, a.newChatFromPhone) })
 	a.chatsV.SetPreview(a.chatPreview)
+	a.chatsV.Box.SetSizeRequest(320, -1)
 	a.paned.SetStartChild(a.chatsV.Box)
 
 	right := gtk.NewBox(gtk.OrientationHorizontal, 0)
@@ -155,6 +182,7 @@ func (a *App) activate() {
 		OnCall:   func(chat bridge.JID, video bool) { a.placeCall(chat, video) },
 		OnBack:   func() { a.showListNarrow() },
 		OnMic:    func() { a.toggleRecord() },
+		OnInfo:   func() { a.infoV.Box.SetVisible(!a.infoV.Box.Visible()) },
 		NameFor:  a.displayName,
 	}, a.settings.GetBool(settings.KeyEnterToSend))
 	right.Append(a.convV.Box)
@@ -164,7 +192,9 @@ func (a *App) activate() {
 		OnBlock:     func(chat bridge.JID, b bool) { _ = a.engine.BlockSet(context.Background(), chat, b) },
 		OnGroupEdit: func(chat bridge.JID) { groups.Manage(a.win, a.engine, chat) },
 		OnBusiness:  func(chat bridge.JID) { business.Show(a.win, a.engine, chat) },
+		OnClose:     func() { a.infoV.Box.SetVisible(false) },
 	})
+	a.infoV.Box.SetVisible(false)
 	right.Append(a.infoV.Box)
 	a.paned.SetEndChild(right)
 	main.Append(a.paned)
@@ -187,16 +217,16 @@ func (a *App) activate() {
 		a.stack.SetVisibleChildName("privacy")
 	})
 	settingsPage.Box.Append(uisettings.StorageSection(a.dataDir, a.cacheDir))
-	a.stack.AddNamed(settingsPage.Box, "settings")
-	a.stack.AddNamed(uisettings.PrivacySection(a.engine, a.log), "privacy")
+	a.stack.AddNamed(sidePage("Settings", "wl-settings-symbolic", "Notifications, privacy, storage and startup.", settingsPage.Box), "settings")
+	a.stack.AddNamed(sidePage("Privacy", "wl-lock-symbolic", "Choose who can see your info, and manage blocked contacts.", uisettings.PrivacySection(a.engine, a.log)), "privacy")
 	a.statusV = status.New(a.db, a.engine, func(to bridge.JID, text string) {
 		_, _ = a.engine.SendText(context.Background(), to, text, bridge.SendOpts{})
 	})
-	a.stack.AddNamed(a.statusV.Box, "status")
+	a.stack.AddNamed(sidePage("Status", "wl-status-symbolic", "Share photos, videos and text that disappear after 24 hours.", a.statusV.Box), "status")
 	a.chansV = channels.New(a.db, a.engine)
-	a.stack.AddNamed(a.chansV.Box, "channels")
-	a.callsV = calls.New(a.db, a.engine, func(chat bridge.JID, video bool) { a.placeCall(chat, video) })
-	a.stack.AddNamed(a.callsV.Box, "calls")
+	a.stack.AddNamed(sidePage("Channels", "wl-channels-symbolic", "Follow channels to get updates on topics you care about.", a.chansV.Box), "channels")
+	a.callsV = calls.New(a.db, a.engine, a.displayName, func(chat bridge.JID, video bool) { a.placeCall(chat, video) })
+	a.stack.AddNamed(sidePage("Calls", "wl-calls-symbolic", "Make voice and video calls to your contacts.", a.callsV.Box), "calls")
 
 	a.win.SetChild(root)
 
@@ -216,7 +246,6 @@ func (a *App) activate() {
 		},
 	)
 
-	a.loadCSS()
 	a.win.ConnectCloseRequest(func() bool {
 		a.settings.Set(settings.KeyWindowW, a.win.Width())
 		a.settings.Set(settings.KeyWindowH, a.win.Height())
@@ -242,6 +271,7 @@ func (a *App) activate() {
 		a.log.Error().Err(err).Msg("engine start")
 	}
 	go a.drainLinks()
+	a.shotSchedule()
 }
 
 // drainLinks opens startup URI intents, then serves single-instance
@@ -480,7 +510,7 @@ func progressText(p int) string { return "Syncing history… " + strconv.Itoa(p)
 func (a *App) onConn(s bridge.ConnState) {
 	switch s {
 	case bridge.ConnConnected:
-		a.connLbl.SetText("●")
+		a.connLbl.RemoveCSSClass("offline")
 		a.connLbl.SetTooltipText("Connected")
 		widgets.SetBanner(a.banner, a.bannerL, "")
 		a.notif.SetConnected(true)
@@ -490,6 +520,7 @@ func (a *App) onConn(s bridge.ConnState) {
 		widgets.SetBanner(a.banner, a.bannerL, "Connecting…")
 		a.notif.SetConnected(false)
 	case bridge.ConnOffline:
+		a.connLbl.AddCSSClass("offline")
 		a.connLbl.SetTooltipText("Offline — retrying")
 		widgets.SetBanner(a.banner, a.bannerL, "Offline — retrying…")
 		a.notif.SetConnected(false)
@@ -525,52 +556,136 @@ func (a *App) showMain() {
 	a.showPage("main")
 }
 
-// buildRail creates the Windows-style icon nav (chats, status,
-// channels, calls, settings).
+// railItem is one navigation-rail destination; the filled icon
+// marks the active page, like the reference client.
+type railItem struct {
+	page, icon, tip string
+}
+
+var (
+	railTop = []railItem{
+		{"main", "wl-chats", "Chats"},
+		{"calls", "wl-calls", "Calls"},
+		{"status", "wl-status", "Status"},
+		{"channels", "wl-channels", "Channels"},
+	}
+	railBottom = []railItem{
+		{"settings", "wl-settings", "Settings"},
+	}
+)
+
+// buildRail creates the Windows-style icon nav: chats, calls,
+// status, channels on top; settings and profile at the bottom.
 func (a *App) buildRail() {
-	a.rail = gtk.NewBox(gtk.OrientationVertical, 4)
+	a.rail = gtk.NewBox(gtk.OrientationVertical, 6)
 	a.rail.AddCSSClass("rail")
 	a.railBtn = map[string]*gtk.Button{}
-	items := []struct {
-		page, icon, tip string
-	}{
-		{"main", "chat-message-new-symbolic", "Chats"},
-		{"status", "user-available-symbolic", "Status"},
-		{"channels", "rss-symbolic", "Channels"},
-		{"calls", "call-start-symbolic", "Calls"},
-	}
-	for _, it := range items {
-		it := it
-		b := gtk.NewButtonFromIconName(it.icon)
+	add := func(it railItem) {
+		b := gtk.NewButtonFromIconName(it.icon + "-symbolic")
 		b.SetTooltipText(it.tip)
 		b.AddCSSClass("rail-btn")
 		b.ConnectClicked(func() { a.showPage(it.page) })
 		a.railBtn[it.page] = b
-		a.rail.Append(b)
+		if it.page != "main" {
+			a.rail.Append(b)
+			return
+		}
+		// Chats carries the unread-chats badge.
+		ov := gtk.NewOverlay()
+		ov.SetChild(b)
+		a.railBadge = gtk.NewLabel("")
+		a.railBadge.AddCSSClass("rail-badge")
+		a.railBadge.SetHAlign(gtk.AlignEnd)
+		a.railBadge.SetVAlign(gtk.AlignStart)
+		a.railBadge.SetCanTarget(false)
+		a.railBadge.SetVisible(false)
+		ov.AddOverlay(a.railBadge)
+		a.rail.Append(ov)
+	}
+	for _, it := range railTop {
+		add(it)
 	}
 	spacer := gtk.NewBox(gtk.OrientationVertical, 0)
 	spacer.SetVExpand(true)
 	a.rail.Append(spacer)
-	setBtn := gtk.NewButtonFromIconName("emblem-system-symbolic")
-	setBtn.SetTooltipText("Settings")
-	setBtn.AddCSSClass("rail-btn")
-	setBtn.ConnectClicked(func() { a.showPage("settings") })
-	a.railBtn["settings"] = setBtn
-	a.rail.Append(setBtn)
-	profBtn := gtk.NewButtonFromIconName("avatar-default-symbolic")
+	sep := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	sep.AddCSSClass("rail-sep")
+	a.rail.Append(sep)
+	for _, it := range railBottom {
+		add(it)
+	}
+	profBtn := gtk.NewButton()
+	profBtn.SetChild(widgets.AvatarFor("Profile", false, 28))
 	profBtn.SetTooltipText("Profile")
 	profBtn.AddCSSClass("rail-btn")
 	profBtn.ConnectClicked(func() { a.showPage("settings") })
 	a.rail.Append(profBtn)
 }
 
-// showPage switches the stack and highlights the rail.
+// sidePage lays a page out like the reference client's non-chat
+// tabs: a list panel at the chat-list width on the left and an
+// intro placeholder filling the rest.
+func sidePage(title, icon, blurb string, content gtk.Widgetter) *gtk.Box {
+	page := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	panel := gtk.NewBox(gtk.OrientationVertical, 0)
+	panel.AddCSSClass("side-panel")
+	panel.SetSizeRequest(chatListWidth, -1)
+	// Explicit, so expanding rows inside never widen the panel.
+	panel.SetHExpand(false)
+	head := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	head.AddCSSClass("pane-header")
+	t := gtk.NewLabel(title)
+	t.AddCSSClass("pane-title")
+	t.SetXAlign(0)
+	head.Append(t)
+	panel.Append(head)
+	scroll := gtk.NewScrolledWindow()
+	scroll.SetVExpand(true)
+	scroll.SetPolicy(gtk.PolicyNever, gtk.PolicyAutomatic)
+	body := gtk.NewBox(gtk.OrientationVertical, 0)
+	body.AddCSSClass("page-content")
+	body.Append(content)
+	scroll.SetChild(body)
+	panel.Append(scroll)
+	page.Append(panel)
+	sep := gtk.NewSeparator(gtk.OrientationVertical)
+	page.Append(sep)
+
+	intro := gtk.NewBox(gtk.OrientationVertical, 8)
+	intro.AddCSSClass("intro-panel")
+	intro.SetHExpand(true)
+	mid := gtk.NewBox(gtk.OrientationVertical, 8)
+	mid.SetVExpand(true)
+	mid.SetVAlign(gtk.AlignCenter)
+	img := gtk.NewImageFromIconName(icon)
+	img.AddCSSClass("intro-icon")
+	mid.Append(img)
+	it := gtk.NewLabel(title)
+	it.AddCSSClass("intro-title")
+	mid.Append(it)
+	txt := gtk.NewLabel(blurb)
+	txt.AddCSSClass("intro-text")
+	txt.SetWrap(true)
+	txt.SetJustify(gtk.JustifyCenter)
+	mid.Append(txt)
+	intro.Append(mid)
+	page.Append(intro)
+	return page
+}
+
+// showPage switches the stack and highlights the rail (filled icon
+// on the active destination).
 func (a *App) showPage(page string) {
-	for p, b := range a.railBtn {
-		if p == page {
-			b.AddCSSClass("active")
-		} else {
-			b.RemoveCSSClass("active")
+	for _, list := range [][]railItem{railTop, railBottom} {
+		for _, it := range list {
+			b := a.railBtn[it.page]
+			if it.page == page || (page == "privacy" && it.page == "settings") {
+				b.AddCSSClass("active")
+				b.SetIconName(it.icon + "-filled-symbolic")
+			} else {
+				b.RemoveCSSClass("active")
+				b.SetIconName(it.icon + "-symbolic")
+			}
 		}
 	}
 	switch page {
@@ -677,10 +792,20 @@ func (a *App) refreshChats() {
 		}
 	}
 	a.chatsV.SetChats(chats)
+	if n := a.chatsV.UnreadChats(); n > 0 {
+		a.railBadge.SetText(strconv.Itoa(n))
+		a.railBadge.SetVisible(true)
+	} else {
+		a.railBadge.SetVisible(false)
+	}
 }
 
 // narrowWidth is the §9 single-pane breakpoint.
 const narrowWidth = 700
+
+// chatListWidth is the chat-list pane's initial width (reference
+// client at its default window size).
+const chatListWidth = 400
 
 // applyNarrow collapses to one pane under narrowWidth (Back button
 // returns to the list) and restores both panes above it.
@@ -722,38 +847,6 @@ func (a *App) showListNarrow() {
 	a.layoutPanes()
 }
 
-// loadCSS applies data/style.css (installed or dev tree) so the
-// accent classes widgets reference actually take effect.
-func (a *App) loadCSS() {
-	path := cssPath()
-	if path == "" {
-		return
-	}
-	prov := gtk.NewCSSProvider()
-	prov.LoadFromPath(path)
-	gtk.StyleContextAddProviderForDisplay(gdk.DisplayGetDefault(), prov, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-}
-
-func cssPath() string {
-	if exe, err := os.Executable(); err == nil {
-		if p := filepath.Join(filepath.Dir(exe), "..", "share", "whatsapp-linux", "style.css"); fileExists(p) {
-			return p
-		}
-		if p := filepath.Join(filepath.Dir(exe), "style.css"); fileExists(p) {
-			return p
-		}
-	}
-	if fileExists(filepath.Join("data", "style.css")) {
-		return filepath.Join("data", "style.css")
-	}
-	return ""
-}
-
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-
 func (a *App) openChat(c bridge.Chat) {
 	a.showPage("main")
 	a.current, a.hasChat, a.narrowList = c, true, false
@@ -769,6 +862,7 @@ func (a *App) openChat(c bridge.Chat) {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
 	a.convV.OpenChat(c, msgs)
+	a.chatsV.SetSelected(c.JID.String())
 	contact, _ := a.db.GetContact(context.Background(), c.JID.String())
 	a.infoV.ShowChat(c, contact)
 	a.notif.Clear()

@@ -122,7 +122,7 @@ zero GTK criticals.
 | chat-info drawer now populated on openChat (was never called) | silent gap | pass headless |
 | shortcuts full §9 set (Ctrl+F / Ctrl+Shift+F in-chat find / Ctrl+Shift+M mute / Ctrl+Q tray / Esc) | partial | pass headless |
 | in-chat find, chat-list focus/clear search | missing | pass headless |
-| narrow <700px single-pane + Back, window size persist, CSS actually loaded (`loadCSS`), theme-aware bubbles, `style.css` installed to `/usr/share/whatsapp-linux/` | missing / dead code | pass headless (owner visual check on desktop) |
+| narrow <700px single-pane + Back, window size persist, CSS actually loaded (`theme.Install`), theme-aware bubbles, stylesheet embedded in the binary (`internal/ui/theme`) | missing / dead code | pass headless (owner visual check on desktop) |
 | fork `Bongbetic/whatsmeow` (offer/preaccept/accept/terminate) + `replace` in go.mod; engine CallPlace/CallAccept/CallHangup wired; transport relay parse → GStreamer audio leg; stanza debug capture; ringtone loop; call window mute/ended real | fork missing, ErrCallsForkRequired | open (code-complete; Gate 5a/5b need owner's live peer: place call → ring? → accept → audio?) |
 | spell-check toggle stored but not consumed | silent gap | gap-documented (needs libspelling GIR follow-up, post-1.0) |
 

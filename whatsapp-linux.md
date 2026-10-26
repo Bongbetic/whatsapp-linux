@@ -340,7 +340,8 @@ Ctrl+Shift+M mute chat, Esc back/close search. Accessibility:
 all icon buttons get labels/tooltips; focus order chatlist →
 convo → composer; high-contrast follows GTK theme. Theming:
 system light/dark only in v1; WhatsApp-green accent via CSS
-provider (`data/style.css`), no hard-coded colors in Go.
+provider (`internal/ui/theme/style.css`, embedded in the binary),
+no hard-coded colors in Go.
 
 ## 10. Settings (GSettings schema `com.bongbetic.WhatsAppLinux`)
 
@@ -547,7 +548,7 @@ Version: `VERSION` file == git tag `whatsapp-linux-vX.Y.Z`
 1. `CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=$V" ./cmd/whatsapp-linux`
 2. stage tree (§5 `data/` → `/usr/share/…`, binary → `/usr/bin/`)
 3. `glib-compile-schemas` check, `desktop-file-validate`.
-4. `xbps-create -A <arch> -n whatsapp-linux-${V}_1 -s "Unofficial WhatsApp client for Linux" --license "MIT, MPL-2.0, AGPL-3.0" (final per WL-1.6) --depends "gtk4>=4.16 gstreamer1 gst-plugins-base1 gst-plugins-good1 gst-plugins-bad1 pipewire sqlite libwebp xdg-desktop-portal" stage/`
+4. `xbps-create -A <arch> -n whatsapp-linux-${V}_1 -s "Unofficial WhatsApp client for Linux" --license "MIT, MPL-2.0, AGPL-3.0" (final per WL-1.6) --depends "gtk4>=4.20 gstreamer1 gst-plugins-base1 gst-plugins-good1 gst-plugins-bad1 pipewire sqlite libwebp xdg-desktop-portal" stage/`
 
 `release.yml` (taema flow): per-arch matrix
 [x86_64, x86_64-musl, aarch64, aarch64-musl] (extend only on

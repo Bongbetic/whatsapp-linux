@@ -41,10 +41,9 @@ func New(db *appstore.DB, eng bridge.Engine) *View {
 	row.Append(follow)
 	v.Box.Append(row)
 	v.list = gtk.NewListBox()
-	scroll := gtk.NewScrolledWindow()
-	scroll.SetVExpand(true)
-	scroll.SetChild(v.list)
-	v.Box.Append(scroll)
+	// The side page already scrolls; a nested scroller would
+	// collapse to zero height inside it.
+	v.Box.Append(v.list)
 	return v
 }
 

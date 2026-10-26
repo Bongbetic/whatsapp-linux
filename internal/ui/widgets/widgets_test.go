@@ -42,17 +42,17 @@ func TestRowMetaTicks(t *testing.T) {
 	}
 }
 
-func TestRowMetaMarkupColors(t *testing.T) {
-	read := bridge.Message{IsFromMe: true, State: bridge.StateRead}
-	if got := RowMetaMarkup(read); !strings.Contains(got, "#53BDEB") {
-		t.Fatalf("read ticks must be blue, got %q", got)
+func TestRowTicks(t *testing.T) {
+	if ticks, read := RowTicks(bridge.Message{IsFromMe: true, State: bridge.StateRead}); ticks != "✓✓" || !read {
+		t.Fatalf("read: got %q %v", ticks, read)
 	}
-	sent := bridge.Message{IsFromMe: true, State: bridge.StateSent}
-	if got := RowMetaMarkup(sent); !strings.Contains(got, "#8696A0") {
-		t.Fatalf("sent ticks must be grey, got %q", got)
+	if ticks, read := RowTicks(bridge.Message{IsFromMe: true, State: bridge.StateDelivered}); ticks != "✓✓" || read {
+		t.Fatalf("delivered: got %q %v", ticks, read)
 	}
-	in := bridge.Message{Ts: read.Ts}
-	if strings.Contains(RowMetaMarkup(in), "span") {
+	if ticks, read := RowTicks(bridge.Message{IsFromMe: true, State: bridge.StateSent}); ticks != "✓" || read {
+		t.Fatalf("sent: got %q %v", ticks, read)
+	}
+	if ticks, _ := RowTicks(bridge.Message{State: bridge.StateRead}); ticks != "" {
 		t.Fatal("incoming must have no ticks")
 	}
 }
