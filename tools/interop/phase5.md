@@ -11,13 +11,23 @@
 
 ## WL-5.1 fork: PlaceCall/AcceptCall
 
-- [ ] `Bongbetic/whatsmeow` fork exposes place/accept with opaque
-      media params; `go.mod` gains the `replace`; weekly
-      upstream-merge starts. **Pending — needs live verification,
-      not just code.**
-- [ ] Until then `CallPlace`/`CallAccept` return
-      `ErrCallsForkRequired`, surfaced in the UI banner (never a
-      silent no-op).
+- [x] `Bongbetic/whatsmeow` fork exposes place/preaccept/accept/
+      terminate (`call_place.go`, framing mirrored from upstream
+      `RejectCall` + inbound shapes); `go.mod` gains the `replace`;
+      weekly upstream-merge starts at the next pin bump.
+      **Needs live verification, not just code.**
+- [x] Engine `CallPlace`/`CallAccept`/`CallHangup` wired to the
+      fork (no more `ErrCallsForkRequired`); transport stanza →
+      relay parse (`voip.FromNode`) → GStreamer audio leg;
+      ambiguous shapes stay signaling-only with the stanza logged.
+- [x] Call window: real stages, mute leg toggle, hangup; incoming
+      ringtone loop (`ringtone.wav` via paplay); call log writes
+      on every ended leg.
+- [ ] Owner live test (Gate 5a): place Linux→phone — does the
+      phone ring? Accept on phone — do accept+transport events
+      arrive (`--debug` stanza log)? 60 s both directions audible?
+      Then reverse (phone→Linux accept). Paste `--debug` `call
+      stanza` lines here when the framing needs iteration.
 
 ## WL-5.2 audio — Gate 5a
 

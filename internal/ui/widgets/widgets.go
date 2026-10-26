@@ -33,10 +33,13 @@ func Initials(title string) string {
 }
 
 // Avatar is a 40px circle with initials (photo support at WL-2.8).
-func Avatar(title string) *gtk.DrawingArea {
+func Avatar(title string) *gtk.DrawingArea { return AvatarSized(title, 40) }
+
+// AvatarSized is Avatar at an explicit diameter.
+func AvatarSized(title string, px int) *gtk.DrawingArea {
 	area := gtk.NewDrawingArea()
-	area.SetContentWidth(40)
-	area.SetContentHeight(40)
+	area.SetContentWidth(px)
+	area.SetContentHeight(px)
 	initials := Initials(title)
 	area.SetDrawFunc(func(_ *gtk.DrawingArea, cr *cairo.Context, w, h int) {
 		cr.SetSourceRGB(0.14, 0.83, 0.4) // WhatsApp green; full theming via CSS at WL-2.2
@@ -67,7 +70,11 @@ func SetBanner(rev *gtk.Revealer, label *gtk.Label, text string) {
 }
 
 // MessageRow builds one conversation row bubble (WL-2.2 read path).
-func MessageRow(m bridge.Message) *gtk.Box {
+func MessageRow(m bridge.Message) *gtk.Box { return MessageRowRich(m, "", false) }
+
+// MessageRowRich adds an optional colored group sender name above
+// the text and renders ticks in Windows colors.
+func MessageRowRich(m bridge.Message, senderName string, showSender bool) *gtk.Box {
 	box := gtk.NewBox(gtk.OrientationHorizontal, 6)
 	bubble := gtk.NewBox(gtk.OrientationVertical, 2)
 	bubble.AddCSSClass("message-bubble")
@@ -77,16 +84,29 @@ func MessageRow(m bridge.Message) *gtk.Box {
 	} else {
 		box.SetHAlign(gtk.AlignStart)
 	}
+	if showSender && senderName != "" && !m.IsFromMe {
+		nm := gtk.NewLabel("")
+		nm.SetMarkup(`<span foreground="` + SenderColor(m.Sender.String()) + `" weight="bold">` +
+			glibEscape(senderName) + `</span>`)
+		nm.SetXAlign(0)
+		bubble.Append(nm)
+	}
 	text := gtk.NewLabel(RowText(m))
 	text.SetWrap(true)
 	text.SetXAlign(0)
 	bubble.Append(text)
-	meta := gtk.NewLabel(RowMeta(m))
-	meta.AddCSSClass("dim-label")
+	meta := gtk.NewLabel("")
+	meta.SetMarkup(RowMetaMarkup(m))
 	meta.SetXAlign(1)
 	bubble.Append(meta)
 	box.Append(bubble)
 	return box
+}
+
+// glibEscape escapes Pango markup in user content.
+func glibEscape(s string) string {
+	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+	return r.Replace(s)
 }
 
 // RowText renders the primary line per message kind (WL-2.2).
@@ -144,4 +164,78 @@ func RowMeta(m bridge.Message) string {
 		ticks = " ✓✓"
 	}
 	return ts + ticks
+}
+
+// Tick colors (Windows light theme): grey until read, blue after.
+const tickGrey = "#8696A0"
+const tickBlue = "#53BDEB"
+
+// RowMetaMarkup renders time + colored ticks as Pango markup.
+func RowMetaMarkup(m bridge.Message) string {
+	ts := m.Ts.Format("15:04")
+	if !m.IsFromMe {
+		return ts
+	}
+	ticks, color := "", tickGrey
+	switch m.State {
+	case bridge.StateSending:
+		ticks = " ◷"
+	case bridge.StateSent:
+		ticks = " ✓"
+	case bridge.StateDelivered:
+		ticks = " ✓✓"
+	case bridge.StateRead, bridge.StatePlayed:
+		ticks, color = " ✓✓", tickBlue
+	}
+	if ticks == "" {
+		return ts
+	}
+	return ts + `<span foreground="` + color + `">` + ticks + `</span>`
+}
+
+// senderPalette mirrors the Windows client's per-sender hues.
+var senderPalette = []string{
+	"#E17076", "#E8833A", "#D19A00", "#35CD96",
+	"#00A0F4", "#7F66FF", "#E14E9A", "#00ACC1",
+}
+
+// SenderColor picks a stable hue for a sender JID string.
+func SenderColor(jid string) string {
+	h := 0
+	for i := 0; i < len(jid); i++ {
+		h = h*31 + int(jid[i])
+	}
+	if h < 0 {
+		h = -h
+	}
+	return senderPalette[h%len(senderPalette)]
+}
+
+// CenterPill builds a centered pill label (date separators, unread
+// dividers) with the given CSS class.
+func CenterPill(text, class string) *gtk.Box {
+	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	box.SetHAlign(gtk.AlignCenter)
+	lbl := gtk.NewLabel(text)
+	lbl.AddCSSClass(class)
+	box.Append(lbl)
+	return box
+}
+
+// ChatPreview renders a one-line list preview: "You: …", "Name: …"
+// or plain text, truncated, with a media glyph for non-text.
+func ChatPreview(m bridge.Message, senderName string) string {
+	prefix := ""
+	if m.IsFromMe {
+		prefix = "You: "
+	} else if senderName != "" {
+		prefix = senderName + ": "
+	}
+	body := RowText(m)
+	const max = 48
+	runes := []rune(body)
+	if len(runes) > max {
+		body = string(runes[:max-1]) + "…"
+	}
+	return prefix + body
 }

@@ -26,8 +26,10 @@ mkdir -p stage/usr/bin stage/usr/share/applications \
   stage/usr/share/icons/hicolor/scalable/apps \
   stage/usr/share/glib-2.0/schemas \
   stage/usr/share/sounds/whatsapp-linux \
+  stage/usr/share/whatsapp-linux \
   stage/usr/share/doc/whatsapp-linux
 mv stage/whatsapp-linux stage/usr/bin/whatsapp-linux
+cp data/style.css stage/usr/share/whatsapp-linux/
 cp data/com.bongbetic.WhatsAppLinux.desktop stage/usr/share/applications/
 cp data/com.bongbetic.WhatsAppLinux.metainfo.xml stage/usr/share/metainfo/
 cp data/icons/hicolor/48x48/apps/com.bongbetic.WhatsAppLinux.png \

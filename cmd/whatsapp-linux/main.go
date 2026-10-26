@@ -40,13 +40,23 @@ func run(args []string) int {
 	}
 	log := logx.New(*debug)
 
+	var rawURIs []string
+	var intents []links.Intent
 	for _, a := range fs.Args() {
-		if _, err := links.Parse(a); err != nil {
+		in, err := links.Parse(a)
+		if err != nil {
 			log.Error().Str("arg", logx.Scrub(a)).Msg("bad URI argument")
 			return 2
 		}
-		// TODO WL-2.1: forward validated URIs to the running instance.
+		rawURIs = append(rawURIs, a)
+		intents = append(intents, in)
 	}
+	// WL-2.1 single instance: forward URIs to the owner, else exit.
+	primary, code, linkCh, stop := app.ClaimInstance(rawURIs)
+	if !primary {
+		return code
+	}
+	defer stop()
 
 	if *showVer {
 		fmt.Println("whatsapp-linux", version)
@@ -80,7 +90,7 @@ func run(args []string) int {
 	defer eng.Stop()
 
 	s := settings.New() // GSettings backend attaches when schema installed (WL-2.6)
-	return app.Run(app.Config{Engine: eng, DB: db, Settings: s, Log: log, Version: version, Hidden: *hidden, DataDir: dataDir, CacheDir: cacheDir()})
+	return app.Run(app.Config{Engine: eng, DB: db, Settings: s, Log: log, Version: version, Hidden: *hidden, DataDir: dataDir, CacheDir: cacheDir(), Links: intents, LinkCh: linkCh})
 }
 
 func cacheDir() string {

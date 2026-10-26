@@ -1,6 +1,6 @@
-// Package chatlist renders the chat list pane (WL-2.2): avatar,
-// title, last message, timestamp, unread pill, mute/pin markers,
-// live search filter, archived toggle, keyboard navigation.
+// Package chatlist renders the chat list pane (WL-2.2): header with
+// title + new-chat, filter pills (All/Unread/Groups), search, and
+// rich rows (avatar, name, preview, time, unread pill, mute/pin).
 package chatlist
 
 import (
@@ -9,9 +9,17 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/Bongbetic/whatsapp-linux/internal/bridge"
 	"github.com/Bongbetic/whatsapp-linux/internal/ui/widgets"
+)
+
+// Filter modes for the pill row.
+const (
+	FilterAll    = "all"
+	FilterUnread = "unread"
+	FilterGroups = "groups"
 )
 
 // View is the chat-list pane widget.
@@ -22,13 +30,32 @@ type View struct {
 	chats    []bridge.Chat
 	filtered []bridge.Chat
 	onOpen   func(bridge.Chat)
+	onNew    func()
+	preview  func(bridge.Chat) string
+	cache    map[string]string
 	showArch bool
+	mode     string
+	pills    map[string]*gtk.Button
 }
 
-// New builds the pane. onOpen fires on Enter/click.
-func New(onOpen func(bridge.Chat)) *View {
-	v := &View{onOpen: onOpen}
-	v.Box = gtk.NewBox(gtk.OrientationVertical, 0)
+// New builds the pane. onOpen fires on Enter/click, onNew on the
+// compose button; preview resolves one row's snippet (may hit the
+// store — results are cached per SetChats).
+func New(onOpen func(bridge.Chat), onNew func()) *View {
+	v := &View{onOpen: onOpen, onNew: onNew, mode: FilterAll, pills: map[string]*gtk.Button{}, cache: map[string]string{}}
+
+	head := gtk.NewBox(gtk.OrientationHorizontal, 8)
+	title := gtk.NewLabel("Chats")
+	title.AddCSSClass("title-1")
+	title.SetHExpand(true)
+	title.SetXAlign(0)
+	head.Append(title)
+	newBtn := gtk.NewButtonFromIconName("list-add-symbolic")
+	newBtn.SetTooltipText("New chat (Ctrl+N)")
+	newBtn.ConnectClicked(func() { v.onNew() })
+	head.Append(newBtn)
+	v.Box = gtk.NewBox(gtk.OrientationVertical, 6)
+	v.Box.Append(head)
 
 	v.search = gtk.NewEntry()
 	v.search.SetPlaceholderText("Search chats (Ctrl+F)")
@@ -37,9 +64,24 @@ func New(onOpen func(bridge.Chat)) *View {
 	buf.ConnectDeletedText(func(uint, uint) { v.applyFilter() })
 	v.Box.Append(v.search)
 
+	prow := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	for _, m := range []struct{ mode, label string }{
+		{FilterAll, "All"}, {FilterUnread, "Unread"}, {FilterGroups, "Groups"},
+	} {
+		m := m
+		b := gtk.NewButtonWithLabel(m.label)
+		b.AddCSSClass("filter-pill")
+		b.ConnectClicked(func() { v.SetMode(m.mode) })
+		v.pills[m.mode] = b
+		prow.Append(b)
+	}
+	v.Box.Append(prow)
+	v.paintPills()
+
 	scroll := gtk.NewScrolledWindow()
 	scroll.SetVExpand(true)
 	v.list = gtk.NewListBox()
+	v.list.AddCSSClass("chat-list")
 	v.list.SetFilterFunc(func(row *gtk.ListBoxRow) bool {
 		i := row.Index()
 		return i >= 0 && i < len(v.filtered)
@@ -54,9 +96,30 @@ func New(onOpen func(bridge.Chat)) *View {
 	return v
 }
 
+// SetPreview installs the snippet resolver (app.db LastMessage).
+func (v *View) SetPreview(fn func(bridge.Chat) string) { v.preview = fn }
+
+// SetMode switches the pill filter.
+func (v *View) SetMode(mode string) {
+	v.mode = mode
+	v.paintPills()
+	v.applyFilter()
+}
+
+func (v *View) paintPills() {
+	for mode, b := range v.pills {
+		if mode == v.mode {
+			b.AddCSSClass("active")
+		} else {
+			b.RemoveCSSClass("active")
+		}
+	}
+}
+
 // SetChats replaces the list contents (newest-first from store).
 func (v *View) SetChats(chats []bridge.Chat) {
 	v.chats = chats
+	v.cache = map[string]string{}
 	v.applyFilter()
 }
 
@@ -67,6 +130,16 @@ func (v *View) applyFilter() {
 		if c.Archived != v.showArch {
 			continue
 		}
+		switch v.mode {
+		case FilterUnread:
+			if c.Unread == 0 {
+				continue
+			}
+		case FilterGroups:
+			if c.Kind != bridge.ChatGroup {
+				continue
+			}
+		}
 		if q != "" && !strings.Contains(strings.ToLower(c.Title), q) {
 			continue
 		}
@@ -74,9 +147,22 @@ func (v *View) applyFilter() {
 	}
 	v.list.RemoveAll()
 	for _, c := range v.filtered {
-		v.list.Append(chatRow(c))
+		v.list.Append(v.chatRow(c))
 	}
 	v.list.InvalidateFilter()
+}
+
+// snippet caches the LastMessage preview per chat row.
+func (v *View) snippet(c bridge.Chat) string {
+	if s, ok := v.cache[c.JID.String()]; ok {
+		return s
+	}
+	s := ""
+	if v.preview != nil {
+		s = v.preview(c)
+	}
+	v.cache[c.JID.String()] = s
+	return s
 }
 
 // SetShowArchived toggles the archived folder view.
@@ -84,6 +170,12 @@ func (v *View) SetShowArchived(show bool) {
 	v.showArch = show
 	v.applyFilter()
 }
+
+// FocusSearch moves keyboard focus to the filter entry (Ctrl+F).
+func (v *View) FocusSearch() { v.search.GrabFocus() }
+
+// ClearSearch resets the filter (Esc).
+func (v *View) ClearSearch() { v.search.Buffer().SetText("", -1) }
 
 // Filter is the pure chat-filter predicate (headless-testable).
 func Filter(chats []bridge.Chat, query string, showArch bool) []bridge.Chat {
@@ -101,21 +193,30 @@ func Filter(chats []bridge.Chat, query string, showArch bool) []bridge.Chat {
 	return out
 }
 
-func chatRow(c bridge.Chat) *gtk.Box {
-	row := gtk.NewBox(gtk.OrientationHorizontal, 8)
-	row.Append(widgets.Avatar(c.Title))
-	mid := gtk.NewBox(gtk.OrientationVertical, 0)
+func (v *View) chatRow(c bridge.Chat) *gtk.Box {
+	row := gtk.NewBox(gtk.OrientationHorizontal, 10)
+	row.Append(widgets.AvatarSized(c.Title, 48))
+	mid := gtk.NewBox(gtk.OrientationVertical, 2)
 	mid.SetHExpand(true)
-	title := gtk.NewLabel(c.Title)
+	title := gtk.NewLabel("")
+	if c.Unread > 0 {
+		title.SetMarkup(`<b>` + escape(c.Title) + `</b>`)
+	} else {
+		title.SetText(c.Title)
+	}
 	title.SetXAlign(0)
+	title.SetEllipsize(pango.EllipsizeEnd)
 	mid.Append(title)
-	last := gtk.NewLabel(lastLine(c))
+	last := gtk.NewLabel(v.snippet(c))
 	last.AddCSSClass("dim-label")
 	last.SetXAlign(0)
+	last.SetEllipsize(pango.EllipsizeEnd)
 	mid.Append(last)
 	row.Append(mid)
-	right := gtk.NewBox(gtk.OrientationVertical, 0)
-	right.Append(gtk.NewLabel(stamp(c.LastTs)))
+	right := gtk.NewBox(gtk.OrientationVertical, 2)
+	ts := gtk.NewLabel(stamp(c.LastTs))
+	ts.AddCSSClass("dim-label")
+	right.Append(ts)
 	if c.Unread > 0 {
 		pill := gtk.NewLabel(fmt.Sprint(c.Unread))
 		pill.AddCSSClass("unread-pill")
@@ -129,17 +230,16 @@ func chatRow(c bridge.Chat) *gtk.Box {
 		marks += "🔇"
 	}
 	if marks != "" {
-		right.Append(gtk.NewLabel(marks))
+		m := gtk.NewLabel(marks)
+		right.Append(m)
 	}
 	row.Append(right)
 	return row
 }
 
-func lastLine(c bridge.Chat) string {
-	if c.LastMsgID == "" {
-		return "No messages yet"
-	}
-	return c.LastMsgID
+func escape(s string) string {
+	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+	return r.Replace(s)
 }
 
 func stamp(ts int64) string {
@@ -147,8 +247,12 @@ func stamp(ts int64) string {
 		return ""
 	}
 	t := time.Unix(ts, 0)
-	if time.Since(t) < 24*time.Hour {
+	now := time.Now()
+	if now.Year() == t.Year() && now.YearDay() == t.YearDay() {
 		return t.Format("15:04")
 	}
-	return t.Format("02/01")
+	if now.Sub(t) < 7*24*time.Hour {
+		return t.Format("Mon")
+	}
+	return t.Format("02/01/06")
 }

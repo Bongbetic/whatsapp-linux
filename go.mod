@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/diamondburned/gotk4/pkg v0.3.1
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/rs/zerolog v1.35.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -32,3 +33,5 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
+
+replace go.mau.fi/whatsmeow => github.com/Bongbetic/whatsmeow v0.0.0-20261026033613-d3bd4ad52714

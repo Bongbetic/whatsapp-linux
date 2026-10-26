@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/Bongbetic/whatsapp-linux/internal/autostart"
 	"github.com/Bongbetic/whatsapp-linux/internal/bridge"
+	"github.com/Bongbetic/whatsapp-linux/internal/core"
+	"github.com/Bongbetic/whatsapp-linux/internal/links"
 	"github.com/Bongbetic/whatsapp-linux/internal/logx"
 	"github.com/Bongbetic/whatsapp-linux/internal/media"
 	"github.com/Bongbetic/whatsapp-linux/internal/notify"
@@ -48,26 +51,36 @@ type App struct {
 	log      zerolog.Logger
 	version  string
 	hidden   bool
+	links    []links.Intent
+	linkCh   <-chan string
 
 	dataDir  string
 	cacheDir string
 
-	win     *gtk.ApplicationWindow
-	connLbl *gtk.Label
-	banner  *gtk.Revealer
-	bannerL *gtk.Label
-	stack   *gtk.Stack
-	paned   *gtk.Paned
-	loginV  *login.View
-	chatsV  *chatlist.View
-	convV   *convo.View
-	infoV   *chatinfo.View
-	statusV *status.View
-	chansV  *channels.View
-	callsV  *calls.View
-	callWin *call.Window
-	callID  string
-	notif   *notify.Notifier
+	win      *gtk.ApplicationWindow
+	connLbl  *gtk.Label
+	banner   *gtk.Revealer
+	bannerL  *gtk.Label
+	stack    *gtk.Stack
+	paned    *gtk.Paned
+	rail     *gtk.Box
+	railBtn  map[string]*gtk.Button
+	voice    *media.Recorder
+	loginV   *login.View
+	chatsV   *chatlist.View
+	convV    *convo.View
+	infoV    *chatinfo.View
+	statusV  *status.View
+	chansV   *channels.View
+	callsV   *calls.View
+	callWin  *call.Window
+	callID   string
+	ringID   string
+	ringStop chan struct{}
+	notif    *notify.Notifier
+
+	narrow     bool // single-pane layout under narrowWidth
+	narrowList bool // narrow mode currently shows the list (not convo)
 
 	current bridge.Chat
 	hasChat bool
@@ -83,12 +96,16 @@ type Config struct {
 	Hidden   bool
 	DataDir  string // ~/.local/share/whatsapp-linux (§6)
 	CacheDir string // ~/.cache/whatsapp-linux (§6)
+	// Links are startup URI intents (argv); LinkCh carries
+	// single-instance forwards from later invocations (single.go).
+	Links  []links.Intent
+	LinkCh <-chan string
 }
 
 // Run starts the application (blocks until quit). No GTK calls happen
 // before this, so headless commands can build Config without a display.
 func Run(cfg Config) int {
-	a := &App{engine: cfg.Engine, db: cfg.DB, settings: cfg.Settings, log: cfg.Log, version: cfg.Version, hidden: cfg.Hidden, dataDir: cfg.DataDir, cacheDir: cfg.CacheDir}
+	a := &App{engine: cfg.Engine, db: cfg.DB, settings: cfg.Settings, log: cfg.Log, version: cfg.Version, hidden: cfg.Hidden, dataDir: cfg.DataDir, cacheDir: cfg.CacheDir, links: cfg.Links, linkCh: cfg.LinkCh}
 	a.gtkApp = gtk.NewApplication(bridge.AppID, gio.ApplicationHandlesOpen)
 	a.gtkApp.ConnectActivate(a.activate)
 	return a.gtkApp.Run(nil)
@@ -103,35 +120,28 @@ func (a *App) activate() {
 	a.connLbl = gtk.NewLabel("●")
 	a.connLbl.SetTooltipText("Connecting…")
 	bar.PackStart(a.connLbl)
-	statusBtn := gtk.NewButtonWithLabel("Status")
-	statusBtn.ConnectClicked(func() {
-		a.statusV.Refresh()
-		a.stack.SetVisibleChildName("status")
-	})
-	bar.PackStart(statusBtn)
-	chansBtn := gtk.NewButtonWithLabel("Channels")
-	chansBtn.ConnectClicked(func() {
-		a.chansV.Refresh()
-		a.stack.SetVisibleChildName("channels")
-	})
-	bar.PackStart(chansBtn)
-	callsBtn := gtk.NewButtonWithLabel("Calls")
-	callsBtn.ConnectClicked(func() {
-		a.callsV.Refresh()
-		a.stack.SetVisibleChildName("calls")
-	})
-	bar.PackStart(callsBtn)
+	title := gtk.NewLabel("WhatsApp")
+	title.AddCSSClass("title-2")
+	bar.SetTitleWidget(title)
 	a.win.SetTitlebar(bar)
 
 	a.banner, a.bannerL = widgets.Banner()
 	root := gtk.NewBox(gtk.OrientationVertical, 0)
 	root.Append(a.banner)
 
+	body := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	root.Append(body)
+	a.buildRail()
+	body.Append(a.rail)
+
 	a.stack = gtk.NewStack()
+	a.stack.SetHExpand(true)
+	body.Append(a.stack)
 	main := gtk.NewBox(gtk.OrientationVertical, 0)
 	a.paned = gtk.NewPaned(gtk.OrientationHorizontal)
 
-	a.chatsV = chatlist.New(a.openChat)
+	a.chatsV = chatlist.New(a.openChat, func() { dialogs.NewChat(a.win, a.newChatFromPhone) })
+	a.chatsV.SetPreview(a.chatPreview)
 	a.paned.SetStartChild(a.chatsV.Box)
 
 	right := gtk.NewBox(gtk.OrientationHorizontal, 0)
@@ -143,11 +153,14 @@ func (a *App) activate() {
 		},
 		OnAttach: func(chat bridge.JID) { a.attach(chat) },
 		OnCall:   func(chat bridge.JID, video bool) { a.placeCall(chat, video) },
+		OnBack:   func() { a.showListNarrow() },
+		OnMic:    func() { a.toggleRecord() },
+		NameFor:  a.displayName,
 	}, a.settings.GetBool(settings.KeyEnterToSend))
 	right.Append(a.convV.Box)
 	a.convV.Box.SetHExpand(true)
 	a.infoV = chatinfo.New(chatinfo.Callbacks{
-		OnMute:      func(chat bridge.JID, h int64) { a.log.Info().Msg("mute lands at WL-2.6") },
+		OnMute:      func(chat bridge.JID, h int64) { a.toggleMute(chat, h) },
 		OnBlock:     func(chat bridge.JID, b bool) { _ = a.engine.BlockSet(context.Background(), chat, b) },
 		OnGroupEdit: func(chat bridge.JID) { groups.Manage(a.win, a.engine, chat) },
 		OnBusiness:  func(chat bridge.JID) { business.Show(a.win, a.engine, chat) },
@@ -185,15 +198,28 @@ func (a *App) activate() {
 	a.callsV = calls.New(a.db, a.engine, func(chat bridge.JID, video bool) { a.placeCall(chat, video) })
 	a.stack.AddNamed(a.callsV.Box, "calls")
 
-	root.Append(a.stack)
 	a.win.SetChild(root)
 
-	a.notif = notify.New(a.gtkApp, a.settings, a.log, notify.NoopTray{},
-		func(chatJID, text string) { a.log.Info().Msg("inline reply lands at WL-2.5") },
+	a.notif = notify.New(a.gtkApp, a.settings, a.log, notify.TrayFor(a.win),
+		func(chatJID, text string) {
+			if _, err := a.engine.SendText(context.Background(), parseJID(chatJID), text, bridge.SendOpts{}); err != nil {
+				a.log.Error().Err(err).Msg("inline reply failed")
+				widgets.SetBanner(a.banner, a.bannerL, "Reply failed: "+err.Error())
+			}
+		},
 		func(chatJID string) { _ = a.engine.MarkRead(context.Background(), parseJID(chatJID)) },
+		func(chatJID string) {
+			glib.IdleAdd(func() bool {
+				a.openChatByJID(parseJID(chatJID))
+				return false
+			})
+		},
 	)
 
+	a.loadCSS()
 	a.win.ConnectCloseRequest(func() bool {
+		a.settings.Set(settings.KeyWindowW, a.win.Width())
+		a.settings.Set(settings.KeyWindowH, a.win.Height())
 		if a.settings.GetBool(settings.KeyCloseToTray) {
 			a.win.SetVisible(false) // keep running in tray (WL-2.5)
 			return true
@@ -201,6 +227,10 @@ func (a *App) activate() {
 		return false
 	})
 	a.shortcuts()
+	glib.TimeoutAdd(500, func() bool {
+		a.applyNarrow()
+		return true
+	})
 
 	if !a.hidden {
 		a.win.Show()
@@ -211,6 +241,34 @@ func (a *App) activate() {
 	if err := a.engine.Start(context.Background()); err != nil {
 		a.log.Error().Err(err).Msg("engine start")
 	}
+	go a.drainLinks()
+}
+
+// drainLinks opens startup URI intents, then serves single-instance
+// forwards for the life of the process.
+func (a *App) drainLinks() {
+	for _, in := range a.links {
+		in := in
+		glib.IdleAdd(func() bool {
+			a.openLinkIntent(in)
+			return false
+		})
+	}
+	if a.linkCh == nil {
+		return
+	}
+	for raw := range a.linkCh {
+		raw := raw
+		glib.IdleAdd(func() bool {
+			in, err := links.Parse(raw)
+			if err != nil {
+				a.log.Error().Err(err).Msg("bad forwarded link")
+				return false
+			}
+			a.openLinkIntent(in)
+			return false
+		})
+	}
 }
 
 // shortcuts wires the §9 global keys.
@@ -220,17 +278,58 @@ func (a *App) shortcuts() {
 		if state&gdk.ControlMask == 0 {
 			return false
 		}
+		shift := state&gdk.ShiftMask != 0
 		switch keyval {
 		case gdk.KEY_n, gdk.KEY_N:
-			dialogs.NewChat(a.win, func(phone string) { a.log.Info().Msg("new chat lands at WL-2.6") })
+			if !shift {
+				dialogs.NewChat(a.win, a.newChatFromPhone)
+				return true
+			}
+		case gdk.KEY_f, gdk.KEY_F:
+			if shift {
+				a.showPage("main")
+				a.convV.ToggleSearch(true)
+			} else {
+				a.showPage("main")
+				a.chatsV.FocusSearch()
+			}
 			return true
+		case gdk.KEY_m, gdk.KEY_M:
+			if shift && a.hasChat {
+				a.toggleMute(a.current.JID, 8)
+				return true
+			}
+		case gdk.KEY_q, gdk.KEY_Q:
+			if !shift {
+				a.win.SetVisible(false) // quit-to-tray
+				return true
+			}
 		case gdk.KEY_comma:
-			a.stack.SetVisibleChildName("settings")
+			a.showPage("settings")
+			return true
+		case gdk.KEY_Escape:
+			a.chatsV.ClearSearch()
+			a.showPage("main")
 			return true
 		}
 		return false
 	})
 	a.win.AddController(keys)
+}
+
+// newChatFromPhone starts (or opens) a DM with a typed phone number.
+func (a *App) newChatFromPhone(phone string) {
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, phone)
+	if len(digits) < 7 {
+		widgets.SetBanner(a.banner, a.bannerL, "Enter a phone number with at least 7 digits")
+		return
+	}
+	a.openChatByJID(bridge.JID{User: digits, Server: "s.whatsapp.net"})
 }
 
 // dispatch forwards backend events to GTK via glib.IdleAdd (§8).
@@ -295,29 +394,33 @@ func (a *App) handle(ev bridge.Event) {
 	}
 }
 
-// placeCall dials out (WL-5.1 fork-gated) and surfaces the verdict.
+// placeCall dials out via the fork (WL-5.1) and opens the call window.
 func (a *App) placeCall(chat bridge.JID, video bool) {
 	id, err := a.engine.CallPlace(context.Background(), chat, video)
 	if err != nil {
-		widgets.SetBanner(a.banner, a.bannerL, "Calls need the fork (WL-5.1): "+err.Error())
+		widgets.SetBanner(a.banner, a.bannerL, "Call failed: "+err.Error())
 		return
 	}
 	a.callID = id
 	a.callWin = call.Show(a.win, bridge.CallEvent{ID: id, Direction: "out", Media: map[bool]string{true: "video", false: "audio"}[video], Stage: "offering"},
-		func() { _ = a.engine.CallHangup(context.Background(), id) })
+		func() { _ = a.engine.CallHangup(context.Background(), id) },
+		func(muted bool) { a.engine.SetCallMuted(id, muted) })
 }
 
 // onCall routes incoming switch transitions to the call UI (WL-5.3).
 func (a *App) onCall(e bridge.CallEvent) {
 	if e.Direction == "in" && e.Stage == "ringing" {
 		a.callID = e.ID
+		a.playRingtone()
 		call.Incoming(a.win, e,
 			func() {
+				a.stopRingtone()
 				if err := a.engine.CallAccept(context.Background(), e.ID, e.Media == "video"); err != nil {
-					widgets.SetBanner(a.banner, a.bannerL, "Accept needs the fork (WL-5.1): "+err.Error())
+					widgets.SetBanner(a.banner, a.bannerL, "Accept failed: "+err.Error())
 				}
 			},
 			func() {
+				a.stopRingtone()
 				_ = a.engine.CallReject(context.Background(), e.Chat, e.ID)
 			})
 		return
@@ -331,6 +434,45 @@ func (a *App) onCall(e bridge.CallEvent) {
 		}
 		a.callWin.SetStage(e.Stage)
 	}
+	if e.Stage == "ended" && e.ID == a.ringID {
+		a.stopRingtone()
+	}
+}
+
+// playRingtone loops the ringtone until stopRingtone (accept,
+// reject, or the remote end hanging up).
+func (a *App) playRingtone() {
+	a.stopRingtone()
+	stop := make(chan struct{})
+	a.ringID, a.ringStop = a.callID, stop
+	path := notify.TonePath("ringtone.wav")
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			notify.PlayFile(path)
+			select {
+			case <-stop:
+				return
+			case <-time.After(3 * time.Second):
+			}
+		}
+	}()
+}
+
+func (a *App) stopRingtone() {
+	if a.ringStop != nil {
+		select {
+		case <-a.ringStop:
+		default:
+			close(a.ringStop)
+		}
+		a.ringStop = nil
+		a.ringID = ""
+	}
 }
 
 func progressText(p int) string { return "Syncing history… " + strconv.Itoa(p) + "%" }
@@ -341,14 +483,18 @@ func (a *App) onConn(s bridge.ConnState) {
 		a.connLbl.SetText("●")
 		a.connLbl.SetTooltipText("Connected")
 		widgets.SetBanner(a.banner, a.bannerL, "")
+		a.notif.SetConnected(true)
 		a.showMain()
 	case bridge.ConnConnecting:
 		a.connLbl.SetTooltipText("Connecting…")
 		widgets.SetBanner(a.banner, a.bannerL, "Connecting…")
+		a.notif.SetConnected(false)
 	case bridge.ConnOffline:
 		a.connLbl.SetTooltipText("Offline — retrying")
 		widgets.SetBanner(a.banner, a.bannerL, "Offline — retrying…")
+		a.notif.SetConnected(false)
 	case bridge.ConnLoggedOut:
+		a.notif.SetConnected(false)
 		a.showLogin("Scan the QR code with WhatsApp → Linked devices")
 		go func() {
 			codes, err := a.engine.PairQR(context.Background())
@@ -369,12 +515,143 @@ func (a *App) onConn(s bridge.ConnState) {
 
 func (a *App) showLogin(status string) {
 	a.loginV.SetStatus(status)
+	a.rail.SetVisible(false)
 	a.stack.SetVisibleChildName("login")
 }
 
 func (a *App) showMain() {
 	a.refreshChats()
-	a.stack.SetVisibleChildName("main")
+	a.rail.SetVisible(true)
+	a.showPage("main")
+}
+
+// buildRail creates the Windows-style icon nav (chats, status,
+// channels, calls, settings).
+func (a *App) buildRail() {
+	a.rail = gtk.NewBox(gtk.OrientationVertical, 4)
+	a.rail.AddCSSClass("rail")
+	a.railBtn = map[string]*gtk.Button{}
+	items := []struct {
+		page, icon, tip string
+	}{
+		{"main", "chat-message-new-symbolic", "Chats"},
+		{"status", "user-available-symbolic", "Status"},
+		{"channels", "rss-symbolic", "Channels"},
+		{"calls", "call-start-symbolic", "Calls"},
+	}
+	for _, it := range items {
+		it := it
+		b := gtk.NewButtonFromIconName(it.icon)
+		b.SetTooltipText(it.tip)
+		b.AddCSSClass("rail-btn")
+		b.ConnectClicked(func() { a.showPage(it.page) })
+		a.railBtn[it.page] = b
+		a.rail.Append(b)
+	}
+	spacer := gtk.NewBox(gtk.OrientationVertical, 0)
+	spacer.SetVExpand(true)
+	a.rail.Append(spacer)
+	setBtn := gtk.NewButtonFromIconName("emblem-system-symbolic")
+	setBtn.SetTooltipText("Settings")
+	setBtn.AddCSSClass("rail-btn")
+	setBtn.ConnectClicked(func() { a.showPage("settings") })
+	a.railBtn["settings"] = setBtn
+	a.rail.Append(setBtn)
+	profBtn := gtk.NewButtonFromIconName("avatar-default-symbolic")
+	profBtn.SetTooltipText("Profile")
+	profBtn.AddCSSClass("rail-btn")
+	profBtn.ConnectClicked(func() { a.showPage("settings") })
+	a.rail.Append(profBtn)
+}
+
+// showPage switches the stack and highlights the rail.
+func (a *App) showPage(page string) {
+	for p, b := range a.railBtn {
+		if p == page {
+			b.AddCSSClass("active")
+		} else {
+			b.RemoveCSSClass("active")
+		}
+	}
+	switch page {
+	case "status":
+		a.statusV.Refresh()
+	case "channels":
+		a.chansV.Refresh()
+	case "calls":
+		a.callsV.Refresh()
+	}
+	a.stack.SetVisibleChildName(page)
+}
+
+// displayName resolves any JID to contact name, push name, or phone.
+func (a *App) displayName(jid bridge.JID) string {
+	if c, err := a.db.GetContact(context.Background(), jid.String()); err == nil {
+		if n := core.DisplayName(c, ""); n != "" {
+			return n
+		}
+	}
+	if jid.Server == "s.whatsapp.net" || jid.Server == "c.us" {
+		return "+" + jid.User
+	}
+	return jid.String()
+}
+
+// chatPreview renders one list row's snippet from the last message.
+func (a *App) chatPreview(c bridge.Chat) string {
+	m, err := a.db.LastMessage(context.Background(), c.JID.String())
+	if err != nil {
+		return ""
+	}
+	sender := ""
+	if !m.IsFromMe && c.Kind == bridge.ChatGroup {
+		sender = a.displayName(m.Sender)
+	}
+	return widgets.ChatPreview(m, sender)
+}
+
+// toggleRecord starts/stops a voice-note recording; stopping sends it.
+func (a *App) toggleRecord() {
+	if !a.hasChat {
+		return
+	}
+	if a.voice != nil {
+		path, err := a.voice.Stop()
+		a.voice = nil
+		a.convV.SetMicRecording(false)
+		if err != nil {
+			widgets.SetBanner(a.banner, a.bannerL, "Recording failed: "+err.Error())
+			return
+		}
+		go a.sendVoice(a.current.JID, path)
+		return
+	}
+	r := &media.Recorder{}
+	dst := filepath.Join(a.cacheDir, "voice-"+strconv.FormatInt(time.Now().UnixNano(), 10)+".ogg")
+	if err := r.Start(dst); err != nil {
+		widgets.SetBanner(a.banner, a.bannerL, "Mic unavailable: "+err.Error())
+		return
+	}
+	a.voice = r
+	a.convV.SetMicRecording(true)
+	widgets.SetBanner(a.banner, a.bannerL, "🔴 Recording voice — tap mic to stop & send")
+}
+
+// sendVoice uploads a finished recording as a voice message.
+func (a *App) sendVoice(chat bridge.JID, path string) {
+	ctx := context.Background()
+	id, err := a.engine.SendMedia(ctx, chat, bridge.MediaFile{Path: path, MIME: "audio/ogg", Kind: "voice"}, bridge.SendOpts{})
+	glib.IdleAdd(func() bool {
+		widgets.SetBanner(a.banner, a.bannerL, "")
+		if err != nil {
+			a.log.Error().Err(err).Msg("voice send failed")
+			widgets.SetBanner(a.banner, a.bannerL, "Voice send failed: "+err.Error())
+			return false
+		}
+		a.log.Debug().Str("id", logx.Scrub(string(id))).Msg("voice sent")
+		a.reloadCurrent()
+		return false
+	})
 }
 
 func (a *App) refreshChats() {
@@ -383,12 +660,106 @@ func (a *App) refreshChats() {
 		a.log.Error().Err(err).Msg("list chats")
 		return
 	}
+	// Resolve DM titles against contacts so rows created before a
+	// name was learned (bare JID/phone) display the name immediately.
+	ctx := context.Background()
+	for i, c := range chats {
+		if c.Kind != bridge.ChatDM {
+			continue
+		}
+		if contact, err := a.db.GetContact(ctx, c.JID.String()); err == nil {
+			if n := core.DisplayName(contact, ""); n != "" {
+				chats[i].Title = n
+			}
+		}
+		if chats[i].Title == "" {
+			chats[i].Title = c.JID.User
+		}
+	}
 	a.chatsV.SetChats(chats)
 }
 
+// narrowWidth is the §9 single-pane breakpoint.
+const narrowWidth = 700
+
+// applyNarrow collapses to one pane under narrowWidth (Back button
+// returns to the list) and restores both panes above it.
+func (a *App) applyNarrow() {
+	if a.win == nil {
+		return
+	}
+	narrow := a.win.Width() >= 0 && a.win.Width() < narrowWidth
+	if narrow == a.narrow && a.win.Width() != 0 {
+		a.layoutPanes()
+		return
+	}
+	a.narrow = narrow
+	a.layoutPanes()
+}
+
+// layoutPanes shows list/convo per narrow state.
+func (a *App) layoutPanes() {
+	if !a.narrow {
+		a.chatsV.Box.SetVisible(true)
+		a.convV.Box.SetVisible(true)
+		a.convV.SetBackVisible(false)
+		a.narrowList = false
+		return
+	}
+	a.convV.SetBackVisible(true)
+	if a.narrowList || !a.hasChat {
+		a.chatsV.Box.SetVisible(true)
+		a.convV.Box.SetVisible(false)
+		return
+	}
+	a.chatsV.Box.SetVisible(false)
+	a.convV.Box.SetVisible(true)
+}
+
+// showListNarrow returns to the list in narrow mode (Back button).
+func (a *App) showListNarrow() {
+	a.narrowList = true
+	a.layoutPanes()
+}
+
+// loadCSS applies data/style.css (installed or dev tree) so the
+// accent classes widgets reference actually take effect.
+func (a *App) loadCSS() {
+	path := cssPath()
+	if path == "" {
+		return
+	}
+	prov := gtk.NewCSSProvider()
+	prov.LoadFromPath(path)
+	gtk.StyleContextAddProviderForDisplay(gdk.DisplayGetDefault(), prov, gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+}
+
+func cssPath() string {
+	if exe, err := os.Executable(); err == nil {
+		if p := filepath.Join(filepath.Dir(exe), "..", "share", "whatsapp-linux", "style.css"); fileExists(p) {
+			return p
+		}
+		if p := filepath.Join(filepath.Dir(exe), "style.css"); fileExists(p) {
+			return p
+		}
+	}
+	if fileExists(filepath.Join("data", "style.css")) {
+		return filepath.Join("data", "style.css")
+	}
+	return ""
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 func (a *App) openChat(c bridge.Chat) {
-	a.stack.SetVisibleChildName("main")
-	a.current, a.hasChat = c, true
+	a.showPage("main")
+	a.current, a.hasChat, a.narrowList = c, true, false
+	if a.narrow {
+		a.layoutPanes()
+	}
 	msgs, err := a.db.ListMessages(context.Background(), c.JID.String(), 50, 0, "")
 	if err != nil {
 		a.log.Error().Err(err).Msg("list messages")
@@ -398,7 +769,76 @@ func (a *App) openChat(c bridge.Chat) {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
 	a.convV.OpenChat(c, msgs)
+	contact, _ := a.db.GetContact(context.Background(), c.JID.String())
+	a.infoV.ShowChat(c, contact)
 	a.notif.Clear()
+}
+
+// openChatByJID opens a chat from a JID string (notification actions,
+// single-instance URI handoff): unknown chats get a row so the
+// conversation can start immediately.
+func (a *App) openChatByJID(jid bridge.JID) {
+	ctx := context.Background()
+	c, err := a.db.GetChat(ctx, jid.String())
+	if err != nil {
+		title := jid.User
+		if contact, cerr := a.db.GetContact(ctx, jid.String()); cerr == nil {
+			if n := core.DisplayName(contact, ""); n != "" {
+				title = n
+			}
+		}
+		c = bridge.Chat{JID: jid, Kind: bridge.ChatDM, Title: title}
+		if uerr := a.db.UpsertChat(ctx, c); uerr != nil {
+			a.log.Error().Err(uerr).Msg("create chat row")
+			return
+		}
+		a.refreshChats()
+	}
+	a.win.Show()
+	a.openChat(c)
+}
+
+// openLinkIntent handles an inbound whatsapp://, wa.me or tel: link
+// (startup arg or single-instance forward): open the DM and seed the
+// composer with any prefilled text.
+func (a *App) openLinkIntent(in links.Intent) {
+	jid := bridge.JID{User: in.Phone, Server: "s.whatsapp.net"}
+	ctx := context.Background()
+	c, err := a.db.GetChat(ctx, jid.String())
+	if err != nil {
+		title := in.Phone
+		if contact, cerr := a.db.GetContact(ctx, jid.String()); cerr == nil {
+			if n := core.DisplayName(contact, ""); n != "" {
+				title = n
+			}
+		}
+		c = bridge.Chat{JID: jid, Kind: bridge.ChatDM, Title: title, Draft: in.Text}
+		if uerr := a.db.UpsertChat(ctx, c); uerr != nil {
+			a.log.Error().Err(uerr).Msg("create link chat row")
+			return
+		}
+		a.refreshChats()
+	} else if in.Text != "" {
+		c.Draft = in.Text
+		_ = a.db.UpsertChat(ctx, c)
+	}
+	a.win.Show()
+	a.openChat(c)
+}
+
+// toggleMute mutes (or unmutes an already-muted chat) via app-state.
+func (a *App) toggleMute(chat bridge.JID, hours int64) {
+	ctx := context.Background()
+	muted := true
+	if c, err := a.db.GetChat(ctx, chat.String()); err == nil {
+		if c.MutedUntil == -1 || c.MutedUntil > time.Now().Unix() {
+			muted = false // already muted → unmute
+		}
+	}
+	if err := a.engine.SetMuted(ctx, chat, muted, hours); err != nil {
+		a.log.Error().Err(err).Msg("mute failed")
+		widgets.SetBanner(a.banner, a.bannerL, "Mute failed: "+err.Error())
+	}
 }
 
 func (a *App) reloadCurrent() {

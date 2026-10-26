@@ -101,3 +101,31 @@ runs (owner), whatsmeow fork place/accept (WL-5.1), and owner
 release approvals. Documented gaps (tray, GIF flag, editor text,
 speed, single-instance handoff, directory/catalog eligibility)
 are each 1.0-shippable with the named follow-up.
+
+## Re-verdict 2026-10-26 (`994d38c` + working tree, 28 files)
+
+`go vet` clean, `gofmt` clean, `go test -tags sqlite_fts5 ./...`
+green, `-race` green on store/core/logx/links/voip,
+`make build` + xvfb `--version` ok. GUI booted headless under
+xvfb (QR pairing flow live, engine on the fork), singleton
+verified live (URI second-instance → exit 0, bare → exit 3),
+zero GTK criticals.
+
+| Change | Old row | New status |
+|---|---|---|
+| contact ingest (device-store sync, PushName/BusinessName/Contact events, history pushnames, DM title resolution + backfill) | names missing (live bug) | open live (code-complete; needs owner SIM to confirm) |
+| chatinfo Mute → `Engine.SetMuted` (SendAppState) with toggle | log-only stub | open live (code-complete) |
+| notification inline-reply → SendText; click → open-chat (was missing action) | log-only stub | open live (code-complete) |
+| new-chat dialog → normalize + open/create DM | log-only stub | pass headless (no peer needed) |
+| single-instance socket handoff (`internal/app/single.go`, exit 0/3) | gap-documented WL-2.1b | pass (verified live under xvfb) |
+| StatusNotifier tray (`internal/notify/sni.go`, godbus) + NoopTray fallback; `SetConnected` wired | gap-documented | pass headless (fallback path in CI/xvfb) + open live (host tray) |
+| chat-info drawer now populated on openChat (was never called) | silent gap | pass headless |
+| shortcuts full §9 set (Ctrl+F / Ctrl+Shift+F in-chat find / Ctrl+Shift+M mute / Ctrl+Q tray / Esc) | partial | pass headless |
+| in-chat find, chat-list focus/clear search | missing | pass headless |
+| narrow <700px single-pane + Back, window size persist, CSS actually loaded (`loadCSS`), theme-aware bubbles, `style.css` installed to `/usr/share/whatsapp-linux/` | missing / dead code | pass headless (owner visual check on desktop) |
+| fork `Bongbetic/whatsmeow` (offer/preaccept/accept/terminate) + `replace` in go.mod; engine CallPlace/CallAccept/CallHangup wired; transport relay parse → GStreamer audio leg; stanza debug capture; ringtone loop; call window mute/ended real | fork missing, ErrCallsForkRequired | open (code-complete; Gate 5a/5b need owner's live peer: place call → ring? → accept → audio?) |
+| spell-check toggle stored but not consumed | silent gap | gap-documented (needs libspelling GIR follow-up, post-1.0) |
+
+Still external: live SIM runs for every `open` row above, and
+the owner's call peer test. `go.mod` gains `godbus/dbus` (pure
+Go, no new system dep) and the fork `replace` (D-2).

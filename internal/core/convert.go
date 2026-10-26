@@ -235,9 +235,20 @@ func (e *Engine) ingestHistorySync(evt *events.HistorySync) {
 				if err := e.db.UpsertMessage(ctx, m); err != nil {
 					e.log.Error().Err(err).Msg("history msg upsert")
 				}
+				// Learn sender push names from history rows too.
+				if push := wm.GetPushName(); push != "" && !m.IsFromMe {
+					notePushName(ctx, e.db, m.Sender, push)
+				}
 			}
 		}
 		if total > 0 {
+			// Upgrade bare DM titles once contact names are learned.
+			if chat.JID.Server != "g.us" && looksBare(chat.Title, chat.JID) {
+				if better := e.dmTitle(ctx, chat.JID, ""); better != "" {
+					chat.Title = better
+					_ = e.db.UpsertChat(ctx, chat)
+				}
+			}
 			e.post(bridge.SyncProgress{Percent: (i + 1) * 100 / total})
 		}
 	}

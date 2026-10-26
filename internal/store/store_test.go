@@ -262,3 +262,18 @@ func TestContactGroupPollCallKV(t *testing.T) {
 		t.Fatalf("kv=%q err=%v", v, err)
 	}
 }
+
+func TestGetContact(t *testing.T) {
+	db, ctx := openTestDB(t)
+	jid := bridge.JID{User: "99", Server: "s.whatsapp.net"}
+	if err := db.UpsertContact(ctx, bridge.Contact{JID: jid, PushName: "Push", ContactName: "Book Name", Phone: "+99"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.GetContact(ctx, jid.String())
+	if err != nil || got.ContactName != "Book Name" || got.PushName != "Push" || got.Phone != "+99" {
+		t.Fatalf("get=%+v err=%v", got, err)
+	}
+	if _, err := db.GetContact(ctx, "nobody@s.whatsapp.net"); err == nil {
+		t.Fatal("want error for unknown contact")
+	}
+}

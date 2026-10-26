@@ -38,15 +38,22 @@ type Notifier struct {
 	log      zerolog.Logger
 	tray     Tray
 	unread   int
+	// lastChat is the most recent notification's chat. Gio delivers
+	// inline-reply text as the action parameter, so the reply target
+	// must be tracked here; replies go to the newest notification.
+	lastChat bridge.Chat
 }
 
 // New wires Reply / Mark-read actions onto the application.
-func New(app *gtk.Application, s *settings.Store, log zerolog.Logger, tray Tray, onReply func(chatJID, text string), onMarkRead func(chatJID string)) *Notifier {
+func New(app *gtk.Application, s *settings.Store, log zerolog.Logger, tray Tray, onReply func(chatJID, text string), onMarkRead func(chatJID string), onOpen func(chatJID string)) *Notifier {
 	n := &Notifier{app: app, settings: s, log: log, tray: tray}
 	reply := gio.NewSimpleAction("reply", glib.NewVariantType("s"))
 	reply.ConnectActivate(func(p *glib.Variant) {
-		// Inline-reply target carries "jid\x00text".
-		onReply("", p.String())
+		// Gio substitutes the typed reply text for the parameter,
+		// dropping the button target: route to the newest chat.
+		if n.lastChat.JID.String() != "@" {
+			onReply(n.lastChat.JID.String(), p.String())
+		}
 	})
 	n.app.AddAction(reply)
 	mark := gio.NewSimpleAction("mark-read", glib.NewVariantType("s"))
@@ -54,6 +61,11 @@ func New(app *gtk.Application, s *settings.Store, log zerolog.Logger, tray Tray,
 		onMarkRead(p.String())
 	})
 	n.app.AddAction(mark)
+	open := gio.NewSimpleAction("open-chat", glib.NewVariantType("s"))
+	open.ConnectActivate(func(p *glib.Variant) {
+		onOpen(p.String())
+	})
+	n.app.AddAction(open)
 	return n
 }
 
@@ -61,6 +73,7 @@ func New(app *gtk.Application, s *settings.Store, log zerolog.Logger, tray Tray,
 // per settings; D-9 scrubbed logging only).
 func (n *Notifier) MessageArrived(chat bridge.Chat, m bridge.Message) {
 	n.unread++
+	n.lastChat = chat
 	n.tray.SetUnread(n.unread)
 	title := chat.Title
 	if title == "" {
@@ -85,6 +98,9 @@ func (n *Notifier) Clear() {
 	n.unread = 0
 	n.tray.SetUnread(0)
 }
+
+// SetConnected mirrors link state to the tray (dim when offline).
+func (n *Notifier) SetConnected(online bool) { n.tray.SetConnected(online) }
 
 // bodyPreview honors notify-preview; never leaks text when off.
 func bodyPreview(m bridge.Message, preview bool) string {

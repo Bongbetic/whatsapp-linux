@@ -43,6 +43,8 @@ type Engine struct {
 	pool      [2]chan dispatchItem
 	poolWg    sync.WaitGroup
 	calls     *voip.Switch
+	legsMu    sync.Mutex
+	legs      map[string]*voip.AudioLeg // callID → live media (WL-5.2)
 }
 
 type dispatchItem struct {
@@ -62,6 +64,7 @@ func New(log zerolog.Logger, profileDir string, db *appstore.DB) (*Engine, error
 		db:     db,
 		events: make(chan bridge.Event, 256),
 		media:  make(map[string]whatsmeow.DownloadableMessage),
+		legs:   make(map[string]*voip.AudioLeg),
 	}
 	e.calls = voip.NewSwitch(e.onCallChange)
 	// §8: worker pool of 2, ordered per chat by JID hash.
@@ -124,6 +127,7 @@ func (e *Engine) Start(ctx context.Context) error {
 		e.post(bridge.ConnEvent{State: bridge.ConnOffline})
 		return err
 	}
+	go e.syncContactsFromDevice(context.Background())
 	return nil
 }
 
@@ -325,6 +329,7 @@ func (e *Engine) handle(raw any) {
 	switch evt := raw.(type) {
 	case *events.Connected:
 		e.post(bridge.ConnEvent{State: bridge.ConnConnected})
+		go e.syncContactsFromDevice(context.Background())
 	case *events.Disconnected:
 		e.post(bridge.ConnEvent{State: bridge.ConnOffline})
 	case *events.LoggedOut:
@@ -333,6 +338,10 @@ func (e *Engine) handle(raw any) {
 		item := dispatchItem{chat: evt.Info.Chat.String(), fn: func() {
 			m := messageToDTO(evt)
 			if e.db != nil {
+				// Learn the sender's push name even before ensureChat.
+				if evt.Info.PushName != "" && !evt.Info.IsFromMe {
+					notePushName(context.Background(), e.db, m.Sender, evt.Info.PushName)
+				}
 				e.ensureChat(context.Background(), m.Chat, evt)
 				if err := e.db.UpsertMessage(context.Background(), m); err != nil {
 					e.log.Error().Err(err).Msg("upsert inbound message")
@@ -352,6 +361,21 @@ func (e *Engine) handle(raw any) {
 		e.post(receiptToDTO(evt))
 	case *events.HistorySync:
 		e.ingestHistorySync(evt)
+	case *events.PushName:
+		if e.db != nil && evt.NewPushName != "" {
+			notePushName(context.Background(), e.db, fromWAJID(evt.JID), evt.NewPushName)
+			e.post(bridge.RefreshEvent{})
+		}
+	case *events.BusinessName:
+		if e.db != nil && evt.NewBusinessName != "" {
+			noteBusinessName(context.Background(), e.db, fromWAJID(evt.JID), evt.NewBusinessName)
+			e.post(bridge.RefreshEvent{})
+		}
+	case *events.Contact:
+		if e.db != nil && evt.Action != nil {
+			noteContactAction(context.Background(), e.db, fromWAJID(evt.JID), evt.Action.GetFullName())
+			e.post(bridge.RefreshEvent{})
+		}
 	case *events.AppState, *events.AppStateSyncComplete:
 		e.post(bridge.RefreshEvent{})
 	case *events.Archive:
@@ -393,23 +417,31 @@ func (e *Engine) handle(raw any) {
 	case *events.ChatPresence:
 		e.post(bridge.TypingEvent{Chat: fromWAJID(evt.MessageSource.Chat), Sender: fromWAJID(evt.MessageSource.Sender), Typing: evt.State == chatPresenceComposing()})
 	case *events.CallOffer:
+		e.logCallNode("offer", evt.Data)
 		_, _ = e.calls.Ring(evt.CallID, evt.From.String(), "audio")
 	case *events.CallOfferNotice:
+		e.logCallNode("offer-notice", evt.Data)
 		_, _ = e.calls.Ring(evt.CallID, evt.From.String(), evt.Media)
 	case *events.CallPreAccept:
+		e.logCallNode("preaccept", evt.Data)
 		_ = e.calls.PreAccept(evt.CallID)
 	case *events.CallAccept:
+		e.logCallNode("accept", evt.Data)
 		_ = e.calls.PreAccept(evt.CallID)
 		_ = e.calls.Connected(evt.CallID)
 	case *events.CallTransport:
+		e.logCallNode("transport", evt.Data)
 		_ = e.calls.Transport(evt.CallID)
+		e.startMedia(evt.CallID, evt.Data)
 	case *events.CallTerminate:
+		e.logCallNode("terminate", evt.Data)
 		outcome := "answered"
 		if c, ok := e.calls.Get(evt.CallID); ok && c.Stage == voip.StageRinging {
 			outcome = "missed"
 		}
 		_ = e.calls.End(evt.CallID, outcome)
 	case *events.CallReject:
+		e.logCallNode("reject", evt.Data)
 		_ = e.calls.End(evt.CallID, "rejected")
 	}
 }
@@ -447,22 +479,70 @@ func (e *Engine) applyChatMute(jid string, until int64) {
 }
 
 // ensureChat creates the chat row for unknown chats on first message.
+// DM titles resolve via contacts (phone-book name > push name > phone);
+// group titles come from group info, never from a member's push name.
 func (e *Engine) ensureChat(ctx context.Context, chat bridge.JID, evt *events.Message) {
 	if e.db == nil {
 		return
 	}
-	if _, err := e.db.GetChat(ctx, chat.String()); err == nil {
+	if existing, err := e.db.GetChat(ctx, chat.String()); err == nil {
+		// Backfill: a DM row created before we learned the name
+		// (bare JID/phone title) gets upgraded exactly once.
+		if existing.Kind == bridge.ChatDM && looksBare(existing.Title, chat) {
+			if better := e.dmTitle(ctx, chat, ""); better != "" {
+				existing.Title = better
+				_ = e.db.UpsertChat(ctx, existing)
+				e.post(bridge.RefreshEvent{})
+			}
+		}
 		return
 	}
 	kind := bridge.ChatDM
-	if chat.Server == "g.us" {
+	title := ""
+	switch chat.Server {
+	case "g.us":
 		kind = bridge.ChatGroup
-	} else if chat.Server == "newsletter" {
+		title = e.groupTitle(ctx, chat)
+	case "newsletter":
 		kind = bridge.ChatChannel
-	} else if chat.Server == "status" {
+	case "status":
 		kind = bridge.ChatStatusBroadcast
 	}
-	_ = e.db.UpsertChat(ctx, bridge.Chat{JID: chat, Kind: kind, Title: evt.Info.PushName})
+	if kind == bridge.ChatDM {
+		title = e.dmTitle(ctx, chat, evt.Info.PushName)
+	}
+	if title == "" {
+		title = chat.String()
+	}
+	_ = e.db.UpsertChat(ctx, bridge.Chat{JID: chat, Kind: kind, Title: title})
+}
+
+// groupTitle fetches the group name; "" when unavailable (caller falls
+// back to the JID rather than showing a member's push name).
+func (e *Engine) groupTitle(ctx context.Context, chat bridge.JID) string {
+	cli, err := e.client()
+	if err != nil {
+		return ""
+	}
+	fetch, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	info, err := cli.GetGroupInfo(fetch, toWAJID(chat))
+	if err != nil || info == nil {
+		return ""
+	}
+	return info.GroupName.Name
+}
+
+// looksBare reports titles that are just the raw JID or phone number —
+// rows that may be upgraded once a real name is learned.
+func looksBare(title string, chat bridge.JID) bool {
+	if title == "" || title == chat.String() {
+		return true
+	}
+	if p := phoneOf(toWAJID(chat)); p != "" && title == p {
+		return true
+	}
+	return false
 }
 
 // cacheMedia keeps the downloadable proto for recent inbound media

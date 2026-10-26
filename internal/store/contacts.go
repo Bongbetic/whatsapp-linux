@@ -25,6 +25,23 @@ func (d *DB) SetBlocked(ctx context.Context, jid string, blocked bool) error {
 	return err
 }
 
+// GetContact fetches one contact by JID string (sql.ErrNoRows if unknown).
+func (d *DB) GetContact(ctx context.Context, jid string) (bridge.Contact, error) {
+	var c bridge.Contact
+	var j string
+	var lid, phone, avatar sql.NullString
+	var blocked, biz int
+	err := d.db.QueryRowContext(ctx, `SELECT jid,lid,phone,push_name,contact_name,about,avatar_path,blocked,is_business
+		FROM contacts WHERE jid=?`, jid).Scan(&j, &lid, &phone, &c.PushName, &c.ContactName, &c.About, &avatar, &blocked, &biz)
+	if err != nil {
+		return c, err
+	}
+	c.JID = parseJID(j)
+	c.LID, c.Phone, c.AvatarPath = lid.String, phone.String, avatar.String
+	c.Blocked, c.IsBusiness = blocked == 1, biz == 1
+	return c, nil
+}
+
 // ListContacts returns contacts ordered by display name.
 func (d *DB) ListContacts(ctx context.Context) ([]bridge.Contact, error) {
 	rows, err := d.db.QueryContext(ctx, `SELECT jid,lid,phone,push_name,contact_name,about,avatar_path,blocked,is_business

@@ -25,13 +25,36 @@ func soundFile() string {
 // playHint plays the notification tone via PipeWire/Pulse (paplay),
 // silently skipping when no player or tone is available.
 func playHint() {
-	f := soundFile()
-	if f == "" {
+	PlayFile(soundFile())
+}
+
+// TonePath resolves a synthesized tone (WL-3.6 data/sounds) by name:
+// the installed sounds dir, then the source tree (dev runs). ""
+// when not found (the caller stays silent).
+func TonePath(name string) string {
+	var candidates []string
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(filepath.Dir(exe), "..", "share", "whatsapp-linux", "sounds", name))
+	}
+	candidates = append(candidates, filepath.Join("data", "sounds", name))
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
+}
+
+// PlayFile plays one tone via PipeWire/Pulse (paplay), silently
+// skipping when no player or tone is available.
+func PlayFile(path string) {
+	if path == "" {
 		return
 	}
 	play, err := exec.LookPath("paplay")
 	if err != nil {
 		return
 	}
-	_ = exec.Command(play, f).Start()
+	_ = exec.Command(play, path).Start()
 }

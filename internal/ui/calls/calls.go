@@ -21,7 +21,7 @@ type View struct {
 	eng  bridge.Engine
 }
 
-// New builds the page. onCall places a call (fork-gated at WL-5.1).
+// New builds the page. onCall places a call via the fork (WL-5.1).
 func New(db *appstore.DB, eng bridge.Engine, onCall func(chat bridge.JID, video bool)) *View {
 	v := &View{db: db, eng: eng}
 	v.Box = gtk.NewBox(gtk.OrientationVertical, 6)
@@ -36,7 +36,7 @@ func New(db *appstore.DB, eng bridge.Engine, onCall func(chat bridge.JID, video 
 	video.ConnectClicked(func() { onCall(jidOf(entry.Buffer().Text()), true) })
 	row.Append(video)
 	link := gtk.NewButtonWithLabel("Copy call link")
-	link.SetTooltipText("call links need the fork (WL-5.1)")
+	link.SetTooltipText("call links land at WL-5.5")
 	row.Append(link)
 	v.Box.Append(row)
 	v.list = gtk.NewListBox()

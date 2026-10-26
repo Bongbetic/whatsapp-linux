@@ -24,12 +24,6 @@ Built phase-by-phase from `whatsapp-linux.md` (plan; not shipped):
 - [x] Phase 6 — hardening
 - [x] Phase 7 — packaging (build + install proven; release on owner OK)
 - [x] Phase 8 — parity audit (`PARITY.md`: zero silent gaps)
-- [ ] Phase 3 — media complete
-- [ ] Phase 4 — social complete
-- [ ] Phase 5 — calls
-- [ ] Phase 6 — hardening
-- [ ] Phase 7 — packaging
-- [ ] Phase 8 — parity audit (`PARITY.md`)
 
 ## Build (Void Linux)
 
@@ -44,7 +38,9 @@ make test         # full suite (adds -tags sqlite_fts5 for FTS5)
 make smoke        # xvfb-run ./whatsapp-linux --version
 ```
 
-Pinned: whatsmeow `v0.0.0-20261017175727-b2b1e71d45e2`,
+Pinned: `Bongbetic/whatsmeow` fork (WL-5.1 call signaling;
+`replace go.mau.fi/whatsmeow =>` the fork — upstream frozen at
+`v0.0.0-20261017175727-b2b1e71d45e2`, merged weekly per D-2),
 gotk4/pkg `v0.3.1` (do not bump to v0.4.x until Void pango
 ≥ 1.57). Update only via a `chore(deps)` commit + interop pass.
 

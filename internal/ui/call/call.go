@@ -21,14 +21,14 @@ type Window struct {
 }
 
 // Show opens the call window for an event-driven call id.
-func Show(parent *gtk.ApplicationWindow, ev bridge.CallEvent, onHangup func()) *Window {
+func Show(parent *gtk.ApplicationWindow, ev bridge.CallEvent, onHangup func(), onMute func(muted bool)) *Window {
 	w := &Window{}
 	w.dlg = gtk.NewDialog()
 	w.dlg.SetTransientFor(&parent.Window)
 	w.dlg.SetTitle("Call — " + ev.Media)
 	w.dlg.SetDefaultSize(640, 480)
 	box := gtk.NewBox(gtk.OrientationVertical, 6)
-	w.status = gtk.NewLabel("call " + ev.Stage + " (media lands at WL-5.2/5.4)")
+	w.status = gtk.NewLabel("call " + ev.Stage)
 	box.Append(w.status)
 	grid := gtk.NewGrid()
 	grid.SetHExpand(true)
@@ -39,15 +39,18 @@ func Show(parent *gtk.ApplicationWindow, ev bridge.CallEvent, onHangup func()) *
 	mute.ConnectClicked(func() {
 		w.muted = !w.muted
 		mute.SetLabel(map[bool]string{true: "Unmute", false: "Mute"}[w.muted])
+		onMute(w.muted)
 	})
 	bar.Append(mute)
 	cam := gtk.NewButtonWithLabel("Camera off")
+	cam.SetTooltipText("video lands at WL-5.4")
 	cam.ConnectClicked(func() {
 		w.camOff = !w.camOff
 		cam.SetLabel(map[bool]string{true: "Camera on", false: "Camera off"}[w.camOff])
 	})
 	bar.Append(cam)
 	spk := gtk.NewButtonWithLabel("Speaker")
+	spk.SetTooltipText("default output (devices at WL-5.7)")
 	bar.Append(spk)
 	share := gtk.NewButtonWithLabel("Share screen")
 	share.SetTooltipText("WL-5.6")
@@ -67,7 +70,7 @@ func Show(parent *gtk.ApplicationWindow, ev bridge.CallEvent, onHangup func()) *
 
 // SetStage updates the status line from switch transitions.
 func (w *Window) SetStage(stage string) {
-	w.status.SetText("call " + stage + " (media lands at WL-5.2/5.4)")
+	w.status.SetText("call " + stage)
 }
 
 // Close dismisses the window.
@@ -79,7 +82,7 @@ func Incoming(parent *gtk.ApplicationWindow, ev bridge.CallEvent, onAccept, onRe
 	d.SetTransientFor(&parent.Window)
 	d.SetTitle("Incoming " + ev.Media + " call")
 	box := gtk.NewBox(gtk.OrientationVertical, 8)
-	box.Append(gtk.NewLabel("Incoming call — ringing (ringtone at WL-3.6+)"))
+	box.Append(gtk.NewLabel("Incoming call — ringing"))
 	acc := gtk.NewButtonWithLabel("Accept")
 	acc.AddCSSClass("suggested-action")
 	acc.ConnectClicked(func() { onAccept(); d.Close() })

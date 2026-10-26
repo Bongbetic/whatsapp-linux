@@ -1,22 +1,93 @@
-/* WhatsApp-green accent over the system light/dark theme (§9).
-   No hard-coded colors in Go; all accent styling lives here. */
+/* Windows light-theme look for whatsapp-linux (§9). All accent
+   styling lives here; Go only references class names. Incoming
+   bubbles are white, outgoing are WhatsApp light-green, chat
+   canvas is warm grey — matching WhatsApp Desktop light mode. */
+
+.chat-bg {
+  background-color: #EFEAE2;
+}
+
+.chat-bg row {
+  background-color: transparent;
+}
+
+.chat-list row {
+  padding: 6px 10px;
+}
 
 .message-bubble {
-  background-color: @theme_bg_color;
+  background-color: #FFFFFF;
+  color: #111B21;
   border-radius: 12px;
+  border: 1px solid alpha(#111B21, 0.08);
   padding: 6px 10px;
 }
 
 .message-bubble.outgoing {
-  background-color: #d9fdd3;
+  background-color: #D9FDD3;
+  border-color: transparent;
 }
 
 .unread-pill {
-  background-color: #25d366;
+  background-color: #25D366;
   color: white;
   border-radius: 10px;
   padding: 0 8px;
   font-weight: bold;
+}
+
+.date-pill {
+  background-color: #FFFFFF;
+  color: #54656F;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.unread-divider {
+  background-color: #25D366;
+  color: white;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.filter-pill {
+  border-radius: 16px;
+  padding: 2px 12px;
+}
+
+.filter-pill.active {
+  background-color: #D1F4CC;
+  color: #008069;
+  font-weight: bold;
+}
+
+.rail {
+  background-color: #F0F2F5;
+  padding: 8px 6px;
+}
+
+.rail-btn {
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.rail-btn.active {
+  background-color: #D1F4CC;
+  color: #008069;
+}
+
+.round-btn {
+  border-radius: 999px;
+  padding: 8px;
+}
+
+.send-btn {
+  background-color: #00A884;
+  color: white;
 }
 
 .dim-label {

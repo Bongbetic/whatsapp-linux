@@ -72,3 +72,23 @@ func parseJID(s string) bridge.JID {
 	}
 	return bridge.JID{User: s}
 }
+
+// LastMessage returns a chat's newest message (for list previews).
+func (d *DB) LastMessage(ctx context.Context, chatJID string) (bridge.Message, error) {
+	var m bridge.Message
+	var chat, sender, quoted, mediaPath, mediaMIME, thumb sql.NullString
+	var fromMe, edited, starred, vo int
+	var ts, size sql.NullInt64
+	err := d.db.QueryRowContext(ctx, `SELECT chat_jid,id,sender_jid,is_from_me,ts,kind,body,quoted_id,media_path,media_mime,media_size,thumb_path,waveform,state,edited,starred,view_once
+		FROM messages WHERE chat_jid=? ORDER BY ts DESC, id DESC LIMIT 1`, chatJID).Scan(
+		&chat, &m.ID, &sender, &fromMe, &ts, &m.Kind, &m.Body, &quoted, &mediaPath, &mediaMIME, &size, &thumb, &m.Waveform, &m.State, &edited, &starred, &vo)
+	if err != nil {
+		return m, err
+	}
+	m.Chat, m.Sender = parseJID(chat.String), parseJID(sender.String)
+	m.IsFromMe, m.Edited, m.Starred, m.ViewOnce = fromMe == 1, edited == 1, starred == 1, vo == 1
+	m.Ts = time.Unix(ts.Int64, 0)
+	m.QuotedID, m.MediaPath, m.MediaMIME, m.ThumbPath = quoted.String, mediaPath.String, mediaMIME.String, thumb.String
+	m.MediaSize = size.Int64
+	return m, nil
+}
