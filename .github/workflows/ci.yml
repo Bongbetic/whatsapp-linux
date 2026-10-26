@@ -13,6 +13,8 @@ jobs:
       - name: Install node runtime deps
         run: xbps-install -Suy xbps && xbps-install -Sy libstdc++ git
       - uses: actions/checkout@v4
+      - name: Trust workspace for VCS stamping
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install build deps
         run: |
           xbps-install -Suy go gtk4-devel libadwaita-devel \
