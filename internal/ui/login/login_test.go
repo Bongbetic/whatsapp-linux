@@ -16,3 +16,13 @@ func TestBitmap(t *testing.T) {
 		t.Fatal("unstable bitmap")
 	}
 }
+
+func TestQRLayoutFitsAllocation(t *testing.T) {
+	for _, size := range [][2]int{{347, 280}, {280, 347}, {280, 280}} {
+		const modules = 73
+		x, y, cell := qrLayout(size[0], size[1], modules)
+		if cell < 1 || x < 0 || y < 0 || x+modules*cell > size[0] || y+modules*cell > size[1] {
+			t.Fatalf("QR clipped in %v: origin=(%d,%d), cell=%d", size, x, y, cell)
+		}
+	}
+}

@@ -51,12 +51,13 @@ func New(onPhoneCode func(number string) string, cancel func()) *View {
 			return
 		}
 		n := len(v.modules)
-		cell := float64(w) / float64(n)
+		offsetX, offsetY, cell := qrLayout(w, h, n)
+		cr.SetAntialias(cairo.AntialiasNone)
 		cr.SetSourceRGB(0, 0, 0)
 		for y, row := range v.modules {
 			for x, black := range row {
 				if black {
-					cr.Rectangle(float64(x)*cell, float64(y)*cell, cell, cell)
+					cr.Rectangle(float64(offsetX+x*cell), float64(offsetY+y*cell), float64(cell), float64(cell))
 					cr.Fill()
 				}
 			}
@@ -103,3 +104,12 @@ func (v *View) ShowQR(code string) {
 
 // SetStatus updates the status line.
 func (v *View) SetStatus(s string) { v.status.SetText(s) }
+
+// qrLayout returns the module size and origin within the drawing area.
+func qrLayout(w, h, modules int) (x, y, cell int) {
+	if modules <= 0 {
+		return 0, 0, 0
+	}
+	cell = min(w, h) / modules
+	return (w - modules*cell) / 2, (h - modules*cell) / 2, cell
+}
