@@ -21,7 +21,7 @@ jobs:
             gobject-introspection libgirepository-devel pkg-config \
             gstreamer1-devel gst-plugins-base1-devel gst-plugins-good1 \
             gst-plugins-bad1 pipewire sqlite-devel libwebp-devel \
-            xdg-desktop-portal xvfb-run git gcc make
+            xdg-desktop-portal xvfb-run xorg-server-xvfb xauth util-linux git gcc make
       - name: Vet
         run: go vet ./...
       - name: Format check
