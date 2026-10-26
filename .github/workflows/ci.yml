@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/void-linux/void-glibc:latest
     steps:
+      - name: Install node runtime deps
+        run: xbps-install -Suy xbps && xbps-install -Sy libstdc++ git
       - uses: actions/checkout@v4
       - name: Install build deps
         run: |
