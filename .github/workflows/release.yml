@@ -42,7 +42,7 @@ jobs:
       - name: Tests
         run: go test -tags sqlite_fts5 ./...
       - name: Build package
-        run: bash tools/build-xbps.sh "${{ matrix.arch }}"
+        run: sh tools/build-xbps.sh "${{ matrix.arch }}"
       - name: Sign and index
         run: |
           # xbps-rindex --privkey wants a key *file*, not key text.

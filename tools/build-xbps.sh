@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the XBPS package for whatsapp-linux (plan §16, WL-7.1).
-# Usage: bash tools/build-xbps.sh [arch]
+# Usage: sh tools/build-xbps.sh [arch]
 # Env: VERSION file == git tag whatsapp-linux-vX.Y.Z (workflow fails
 # on mismatch). Output lands in dist/.
 set -eu
