@@ -5,7 +5,8 @@
 pkgname=whatsapp-linux
 version=0.0.0
 revision=1
-archs="x86_64 x86_64-musl aarch64 aarch64-musl"
+# x86_64 first; extend only when release.yml builds that arch green.
+archs="x86_64"
 short_desc="Unofficial WhatsApp client for Linux"
 maintainer="Bongbetic <soubarna@live.in>"
 license="MIT, MPL-2.0, GPL-3.0-only"

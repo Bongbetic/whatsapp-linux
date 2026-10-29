@@ -6,6 +6,26 @@
 set -eu
 
 ARCH="${1:-$(xbps-uhelper arch 2>/dev/null || uname -m)}"
+# Map XBPS arch to Go arch. Refuse anything the local toolchain
+# cannot compile: a mislabeled package is worse than no package.
+case "$ARCH" in
+  x86_64|x86_64-musl) GOARCH=amd64 ;;
+  aarch64|aarch64-musl) GOARCH=arm64 ;;
+  armv7l|armv7l-musl) GOARCH=arm; GOARM=7 ;;
+  armv6l|armv6l-musl) GOARCH=arm; GOARM=6 ;;
+  i686) GOARCH=386 ;;
+  *) echo "error: unsupported ARCH: $ARCH" >&2; exit 1 ;;
+esac
+case "$ARCH" in
+  *-musl) ldd --version 2>&1 | grep -qi musl \
+    || { echo "error: $ARCH needs a musl host toolchain" >&2; exit 1; } ;;
+esac
+if [ "$GOARCH" != "$(go env GOARCH)" ] && [ "${CROSS:-0}" != 1 ]; then
+  echo "error: $ARCH is a cross build (CGO); set CROSS=1 with CC configured" >&2
+  exit 1
+fi
+export GOOS=linux GOARCH
+if [ -n "${GOARM:-}" ]; then export GOARM; fi
 V="$(cat VERSION)"
 # XBPS versions cannot carry '-': 0.0.0-dev -> 0.0.0.dev (test builds).
 V="$(printf '%s' "$V" | tr '-' '.')"

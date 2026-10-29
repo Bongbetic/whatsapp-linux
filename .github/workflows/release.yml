@@ -9,27 +9,51 @@ on:
     tags: ['whatsapp-linux-v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
       matrix:
-        arch: [x86_64, x86_64-musl, aarch64, aarch64-musl]
+        # x86_64 first; extend only on green builds (plan §16).
+        # build-xbps.sh refuses archs it cannot compile for.
+        arch: [x86_64]
     runs-on: ubuntu-latest
     container: ghcr.io/void-linux/void-glibc:latest
     steps:
+      - name: Install node runtime deps
+        run: xbps-install -Suy xbps && xbps-install -Sy libstdc++ git
       - uses: actions/checkout@v4
+      - name: Trust workspace for VCS stamping
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Check tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           test "${GITHUB_REF_NAME}" = "whatsapp-linux-v$(cat VERSION)"
+      - name: Install build deps
+        run: |
+          xbps-install -Suy go gtk4-devel libadwaita-devel \
+            gobject-introspection libgirepository-devel pkg-config \
+            gstreamer1-devel gst-plugins-base1-devel gst-plugins-good1 \
+            gst-plugins-bad1 pipewire sqlite-devel libwebp-devel \
+            xdg-desktop-portal xvfb-run xorg-server-xvfb xauth util-linux git gcc make \
+            glib-devel desktop-file-utils
+      - name: Tests
+        run: go test -tags sqlite_fts5 ./...
       - name: Build package
         run: bash tools/build-xbps.sh "${{ matrix.arch }}"
       - name: Sign and index
         run: |
+          # xbps-rindex --privkey wants a key *file*, not key text.
+          { printf '%s' "$XBPS_PRIVKEY"; echo; } > /tmp/signkey.pem
+          chmod 600 /tmp/signkey.pem
           cd dist
           XBPS_ARCH=${{ matrix.arch }} xbps-rindex -a -- *.xbps
-          xbps-rindex --privkey "$XBPS_PRIVKEY" \
+          xbps-rindex --privkey /tmp/signkey.pem \
             --signedby "Bongbetic <soubarna@live.in>" -s .
-          XBPS_ARCH=${{ matrix.arch }} xbps-rindex -S ./*.xbps
+          XBPS_ARCH=${{ matrix.arch }} xbps-rindex --privkey /tmp/signkey.pem -S ./*.xbps
+          rm -f /tmp/signkey.pem
         env:
           XBPS_PRIVKEY: ${{ secrets.XBPS_PRIVKEY }}
       - uses: actions/upload-artifact@v4

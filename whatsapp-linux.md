@@ -550,11 +550,12 @@ Version: `VERSION` file == git tag `whatsapp-linux-vX.Y.Z`
 3. `glib-compile-schemas` check, `desktop-file-validate`.
 4. `xbps-create -A <arch> -n whatsapp-linux-${V}_1 -s "Unofficial WhatsApp client for Linux" --license "MIT, MPL-2.0, AGPL-3.0" (final per WL-1.6) --depends "gtk4>=4.20 gstreamer1 gst-plugins-base1 gst-plugins-good1 gst-plugins-bad1 pipewire sqlite libwebp xdg-desktop-portal" stage/`
 
-`release.yml` (taema flow): per-arch matrix
-[x86_64, x86_64-musl, aarch64, aarch64-musl] (extend only on
-green builds): build → `XBPS_ARCH=<a> xbps-rindex -a *.xbps` →
-sign `--privkey $XBPS_PRIVKEY --signedby "Bongbetic
-<soubarna@live.in>"` → attach `.xbps`, `.sig2`, `<arch>-repodata`
+`release.yml` (taema flow): per-arch matrix, x86_64 first
+(extend only on green builds): install deps → `go test` →
+build → `XBPS_ARCH=<a> xbps-rindex -a *.xbps` → write
+`$XBPS_PRIVKEY` secret to a file, sign `--privkey <file>
+--signedby "Bongbetic <soubarna@live.in>"` (`-s` repo, `-S`
+package) → attach `.xbps`, `.sig2`, `<arch>-repodata`
 → post-release commit bumps `srcpkgs/whatsapp-linux/template`
 + README. Repo URL
 `https://github.com/Bongbetic/whatsapp-linux/releases/latest/download`;
