@@ -60,7 +60,7 @@ sudo xbps-install -S whatsapp-linux   # plain -S shows it first
 ```
 
 Key fingerprint: `fa:d1:00:32:ce:b1:b9:fd:73:05:05:76:75:54:37:25`
-(`-y` skips the check — don't). First release ships with 0.1.0.
+(`-y` skips the check — don't). First release: 0.1.0.
 
 ## Run
 

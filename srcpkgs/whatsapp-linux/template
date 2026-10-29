@@ -3,7 +3,7 @@
 # tools/build-xbps.sh in release.yml). version+checksum are bumped
 # by the post-release job; never bump by hand.
 pkgname=whatsapp-linux
-version=0.0.0
+version=0.1.0
 revision=1
 # x86_64 first; extend only when release.yml builds that arch green.
 archs="x86_64"
@@ -12,7 +12,7 @@ maintainer="Bongbetic <soubarna@live.in>"
 license="MIT, MPL-2.0, GPL-3.0-only"
 homepage="https://github.com/Bongbetic/whatsapp-linux"
 distfiles="https://github.com/Bongbetic/whatsapp-linux/releases/download/${pkgname}-v${version}/${pkgname}-${version}_${revision}.${XBPS_TARGET_ARCH}.xbps"
-checksum=UPDATE_ME_AFTER_FIRST_RELEASE
+checksum=0c02997bde7c1d80dabfebc954e2db39c13d72596237bd4ee4b05b3f75145960
 repository=nonfree
 depends="gtk4>=4.20 gstreamer1>=1.28 gst-plugins-base1>=1.28 gst-plugins-good1>=1.28 gst-plugins-bad1>=1.28 pipewire>=1.0 sqlite>=3.0 libwebp>=1.0 libgirepository>=1.80 xdg-desktop-portal>=1.0 hicolor-icon-theme>=0.17 desktop-file-utils>=0.23"
 nopie=yes
